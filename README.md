@@ -122,6 +122,29 @@ python /path/to/tools/apply_patches.py /path/to/patches .
 
 ---
 
+## 签名
+
+仓库**不包含任何 keystore**（私钥进了公开仓库，任何人都能签出被系统当作「官方更新」的包）。
+自己生成一个，步骤见 [`tools/README.md`](tools/README.md)。
+
+社区里流传的本补丁构建版本由下面这把钥匙签名，可以用它核对下载到的 APK 是不是原样：
+
+```
+Subject : CN=mtlite tweaks, O=mtlite, C=CN
+算法    : RSA 4096 / SHA256withRSA
+有效期  : 2026-10-18 ~ 2054-03-05
+SHA-256 : 16:5E:BE:55:55:1C:67:16:C7:32:BB:30:CE:39:57:A6:A0:1F:AF:5B:00:DD:17:5F:B2:8B:93:D0:CC:9A:3D:78
+```
+
+```bash
+keytool -printcert -jarfile 你的.apk     # 比对 SHA256 那一行
+```
+
+换了签名就不能覆盖安装，必须先卸载。反过来也一样：如果你自己生成 key 出包，
+别人装过别的签名的同版本，也装不上。
+
+---
+
 ## 已知限制
 
 - **私信冷却时间服务端不会告诉你**，用的是设置里的固定秒数。设短了会被拒（不会自动翻倍，弹窗说明后点「重发」），设长了只是白等。
