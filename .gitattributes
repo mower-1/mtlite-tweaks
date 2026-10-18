@@ -1,0 +1,3 @@
+# 不做任何换行转换：本仓库里的 lua / dex / png 都是逐字节原样，
+# 让 Windows（core.autocrlf=true）和 Linux checkout 出来的内容一致。
+* -text

@@ -1,0 +1,271 @@
+--- a/pages/zhuye/main.lua
++++ b/pages/zhuye/main.lua
+@@ -40,59 +40,107 @@
+     return true
+   end
+ end
+---登录参数
+-function 使用登录参数登录()
+-  cookie=获取网页Cookie("https://bbs.binmt.cc/")
+-  if cookie then
+-    local cookie1,cookie2=cookie:match'cQWy_.+_comiis_homestyleid_u(.-)=.+%%2A(.-);'
+-    if cookie1 or cookie2 then
++--登录态判断：Discuz 的登录 cookie 是 xxx_auth，登出后会被写成 deleted
++function Cookie已登录(ck)
++  if type(ck) ~= "string" or ck == "" then return false end
++  local 值 = ck:match("[%w_]+_auth=([^;]*)")
++  if not 值 then return false end
++  值 = 值:gsub("%s", "")
++  return 值 ~= "" and 值 ~= "deleted"
++end
++
++--从侧边栏 HTML 里取昵称 / 等级 / 头衔 / 积分 / 头像
++--（旧版用的是「<p><span class=...>…</p>.+<p class=...」这种整段匹配，模板里换行一改就全废）
++function 解析侧边栏(html)
++  local 结果 = {}
++  if type(html) ~= "string" then return 结果 end
++  local 块 = html:match('class="sidenv_user"(.-)</a>') or
++             html:match('class="sidenv_edit">(.-)class="sidenv_li">') or ""
++  if 块 == "" then return 结果 end
++  结果.名字 = 块:match('class="user_tit[^"]*"%s*>%s*(.-)%s*</span>')
++  结果.等级 = 块:match('class="user_lev[^"]*"%s*>%s*(.-)%s*</span>')
++  结果.头像 = 块:match('<img[^>]-src="(.-)"')
++  local 头衔, 积分 = 块:match('<p class="f13[^"]*">%s*<span[^>]*>%s*(.-)%s*</span>%s*<span[^>]*>%s*(.-)%s*</span>')
++  结果.头衔 = 头衔
++  结果.积分 = 积分 and (积分:match("(%d+)") or 积分) or nil
++  return 结果
++end
++
++function 刷新侧边栏(数据, ck)
++  if 数据.头像 and 数据.头像 ~= "" then
++    pcall(function()
+       import "com.bumptech.glide.Glide"
+-      local url="https://bbs.binmt.cc/source/plugin/comiis_app_homestyle/image/home_bg/"..cookie2
+-      Glide.with(activity).load(url).into(侧滑栏壁纸)
+-      local url="https://bbs.binmt.cc/uc_server/avatar.php?uid="..cookie1.."&size=middle&ts="..math.random(000,999)
+-      Glide.with(activity).load(url).into(侧滑栏头像)
+-      Http.get("https://bbs.binmt.cc/forum.php?mod=guide&view=hot&mobile=2",cookie,"utf-8",nil,function(code,content,cookie,header)
+-        if code==200 then
+-          local content=content:match('class="sidenv_edit">(.-)class="sidenv_li">')
+-          if content then
+-            local maintext,Lv,title,point=content:match('<p><span class=".-">(.-)</span><span class=".-">(.-)</span></p>.+<p class=".-"><span class=".-">(.-)</span><span class=".-">(.-)</span></p>')
+-            侧滑栏标题.text=maintext
+-            侧滑栏子标题.text=title.." "..Lv.." "..point
+-           else
+-            print2("登陆失效，请重新登录")
+-            存储应用数据("登录参数",nil)
+-          end
+-        end
+-      end)
+-      存储应用数据("登录参数",cookie)
+-     else
+-      print2("登陆失效，请重新登录")
+-      存储应用数据("登录参数",nil)
+-      local sj=os.date("%H")
+-      if(sj < "12") then
+-        侧滑栏标题.setText("早上好!请登录")
+-       elseif(sj >="12" && sj < "14") then
+-        侧滑栏标题.setText("中午好!请登录")
+-       elseif(sj >= "14" && sj < "18") then
+-        侧滑栏标题.setText("下午好!请登录")
+-       elseif(sj >= "18") then
+-        侧滑栏标题.setText("晚上好!请登录")
+-      end
+-    end
+-   else
+-    print2("登陆失效，请重新登录")
+-    存储应用数据("登录参数",nil)
+-    local sj=os.date("%H")
+-    if(sj < "12") then
+-      侧滑栏标题.setText("早上好!请登录")
+-     elseif(sj >="12" && sj < "14") then
+-      侧滑栏标题.setText("中午好!请登录")
+-     elseif(sj >= "14" && sj < "18") then
+-      侧滑栏标题.setText("下午好!请登录")
+-     elseif(sj >= "18") then
+-      侧滑栏标题.setText("晚上好!请登录")
+-    end
+-  end
++      Glide.with(activity).load(数据.头像).into(侧滑栏头像)
++    end)
++  end
++  if 数据.名字 and 数据.名字 ~= "" then
++    侧滑栏标题.text = 数据.名字
++    local 子 = {}
++    if 数据.头衔 then table.insert(子, 数据.头衔) end
++    if 数据.等级 then table.insert(子, 数据.等级) end
++    if 数据.积分 then table.insert(子, "积分: " .. 数据.积分) end
++    侧滑栏子标题.text = table.concat(子, " ")
++    return true
++  end
++  return false
++end
++
++function 显示未登录问候()
++  local sj = os.date("%H")
++  local 问候 = "晚上好"
++  if sj < "12" then
++    问候 = "早上好"
++   elseif sj >= "12" and sj < "14" then
++    问候 = "中午好"
++   elseif sj >= "14" and sj < "18" then
++    问候 = "下午好"
++  end
++  侧滑栏标题.setText(问候 .. "!请登录")
++  侧滑栏子标题.setText("登录后更精彩...")
++end
++
++--静默：进入软件时自动刷新用，失败不弹提示（避免每次启动都吓人）
++function 使用登录参数登录(静默)
++  local ck = 获取网页Cookie("https://bbs.binmt.cc/") or ""
++  if not Cookie已登录(ck) then
++    存储应用数据("登录参数", nil)
++    登录参数 = nil
++    显示未登录问候()
++    if not 静默 then print2("尚未登录或登录已失效\n请重新登录") end
++    return
++  end
++  --cookie 有效就先存下来，后面的网络问题都不影响登录状态
++  存储应用数据("登录参数", ck)
++  登录参数 = ck
++  Http.get("https://bbs.binmt.cc/forum.php?mod=guide&view=hot&mobile=2", ck, "utf-8", nil,
++  function(code, content, cookie, header)
++    if code ~= 200 or type(content) ~= "string" then return end
++    local 数据 = 解析侧边栏(content)
++    if 刷新侧边栏(数据, ck) then
++      --侧滑栏壁纸是模板自己的 cookie，取得到就用，取不到不影响登录状态
++      local 壁纸 = ck:match("comiis_homestyleid[^=]*=[^;]-%%2A([^;%%]+)")
++      if 壁纸 then
++        pcall(function()
++          import "com.bumptech.glide.Glide"
++          Glide.with(activity).load("https://bbs.binmt.cc/source/plugin/comiis_app_homestyle/image/home_bg/" .. 壁纸).into(侧滑栏壁纸)
++        end)
++      end
++     else
++      --没解析到昵称：分清「模板改版」和「登录真的过期了」
++      local 有侧栏 = content:find('class="comiis_sidenv_box"', 1, true) ~= nil
++      local 有用户 = content:find('class="sidenv_user"', 1, true) ~= nil
++      if 有侧栏 and not 有用户 then
++        --侧边栏在、但没有用户块：服务端当你是游客，登录确实失效了
++        存储应用数据("登录参数", nil)
++        登录参数 = nil
++        显示未登录问候()
++        if not 静默 then print2("登录已失效\n请重新登录") end
++       else
++        --页面结构又变了、或者这页本来就没有侧边栏：不能据此判定登录失效
++        侧滑栏标题.setText("已登录，点此刷新")
++      end
++    end
++  end)
+ end
+ if 获取应用数据("自动签到") == "true" and tonumber(os.date("%d")) ~= tonumber(获取应用数据("签到日期")) and 登录参数 then
+   Http.get("https://bbs.binmt.cc/plugin.php?id=k_misign:sign&operation=qiandao&format=text&formhash="..获取应用数据("签到参数"),登录参数,"utf-8",nil,function(code,content,cookie,header)
+@@ -114,23 +162,11 @@
+     end
+   end)
+ end
+---[[if 登录参数 then
+-  使用登录参数登录()
+- else
+-  local sj=os.date("%H")
+-  if(sj < "12") then
+-    侧滑栏标题.setText("早上好!请登录")
+-   elseif(sj >="12" && sj < "14") then
+-    侧滑栏标题.setText("中午好!请登录")
+-   elseif(sj >= "14" && sj < "18") then
+-    侧滑栏标题.setText("下午好!请登录")
+-   elseif(sj >= "18") then
+-    侧滑栏标题.setText("晚上好!请登录")
+-  end
+-end]]
++--侧边栏的自动刷新放在首页 WebView 加载完成的事件里（见文件末尾），这里只保留一个标记
++侧滑栏已刷新 = false
+ 侧滑栏标题.onClick=function()--点击事件
+   if 登录参数 then
+-    if 侧滑栏标题.text=="请点击刷新" then
++    if 侧滑栏标题.text=="请点击刷新" or 侧滑栏标题.text=="已登录，点此刷新" then
+       使用登录参数登录()
+      else
+       跳转指示器页(3)
+@@ -322,6 +358,7 @@
+     end
+     --主菜单.add("浏览器打开")
+     --主菜单.add("复制链接")
++    主菜单.add("电脑版网页")
+     主菜单.add("退出软件")
+     popupMenu.onMenuItemClick=function(item)
+       switch item.title
+@@ -348,6 +385,21 @@
+         浏览器打开(获取网址())
+        case "复制链接"
+         复制文本(获取网址())
++       case "电脑版网页"
++        --首页 / 社区在电脑版没有对应页面，统一进论坛首页；
++        --导读（最新）保留电脑版的导读页
++        电脑版入口地址=获取网址() or ""
++        当前分页=-1
++        pcall(function()
++          local i=this.uiManager.viewPager.getCurrentItem()
++          if i~=nil then 当前分页=tonumber(i) end
++        end)
++        if 当前分页==0 or 当前分页==1 then
++          电脑版入口地址="https://bbs.binmt.cc/forum.php"
++         elseif 当前分页==2 then
++          电脑版入口地址="https://bbs.binmt.cc/forum.php?mod=guide&view=newthread"
++        end
++        打开电脑版网页(电脑版入口地址)
+        case "退出软件"
+         退出程序()
+       end
+@@ -419,19 +471,11 @@
+ function(superCall,view,url,favicon)--页面开始加载事件
+ end,
+ function(superCall,view,url)--页面加载结束事件
+-  if 登录参数 then
+-    使用登录参数登录()
+-   else
+-    local sj=os.date("%H")
+-    if(sj < "12") then
+-      侧滑栏标题.setText("早上好!请登录")
+-     elseif(sj >="12" && sj < "14") then
+-      侧滑栏标题.setText("中午好!请登录")
+-     elseif(sj >= "14" && sj < "18") then
+-      侧滑栏标题.setText("下午好!请登录")
+-     elseif(sj >= "18") then
+-      侧滑栏标题.setText("晚上好!请登录")
+-    end
++  --每次进软件刷新一次侧边栏（以前这里用的是「cookie1,cookie2」+ 整段 HTML 匹配，
++  --模板一改版就必然失败，然后弹「登陆失效」并把登录参数清掉；现在只认 auth cookie）
++  if not 侧滑栏已刷新 then
++    侧滑栏已刷新 = true
++    使用登录参数登录(true)
+   end
+   if 获取应用数据("网页背景色")=="true" then
+     view.evaluateJavascript([[document.body.style.backgroundColor = "]]..窗体背景色2..[[";]],function end)
+@@ -661,6 +705,7 @@
+   local 板块=url:match'bbs%.binmt%.cc/forum%-.+%-.+%.html'
+   local 个人页=url:match'bbs%.binmt%.cc/home%.php%?mod=space&do=profile$'
+   local 用户页=url:match'bbs%.binmt%.cc/home%.php%?mod=space&uid=.+&do=profile'
++  local 用户名页=url:match'bbs%.binmt%.cc/home%.php%?mod=space&username='
+   local 等级=url:match'bbs%.binmt%.cc/home%.php%?mod=spacecp&ac=usergroup'
+   local 勋章=url:match'bbs%.binmt%.cc/home%.php%?mod=medal&action=log'
+   local 消息=url:match'bbs%.binmt%.cc/home%.php%?mod=space&do=pm&subop=view&touid=.+'
+@@ -692,7 +737,17 @@
+    elseif 用户页 or 个人页 or 等级 or 消息 or 勋章 then
+     进子页面("yonghu",{url})
+     return true
+-   elseif 积分记录 or 系统提醒 or 忽略打招呼 then
++   elseif 系统提醒 then
++    --space-uid-123.html 既是「提醒」链接，也是帖子/消息里点用户名的链接，不能一律吞掉
++    local uid=url:match('space%-uid%-(%d+)%.html')
++    if uid then
++      进子页面("yonghu",{"https://bbs.binmt.cc/home.php?mod=space&uid="..uid.."&do=profile&mobile=2"})
++    end
++    return true
++   elseif 用户名页 then
++    进子页面("yonghu",{url})
++    return true
++   elseif 积分记录 or 忽略打招呼 then
+     --懒得判断
+     return true
+    elseif 回复帖 then

@@ -1,0 +1,127 @@
+--- a/pages/tiezi/main.lua
++++ b/pages/tiezi/main.lua
+@@ -5,6 +5,15 @@
+ import "net.fusionapp.core.ui.fragment.WebInterface"
+ import "androidx.recyclerview.widget.*"
+ import "Function_bottom"
++import "tiezi_plus"
++--回复可见 / 评论屏蔽 会话内状态（同一页面刷新不会重置）
++本地已提示tid=nil
++本地自动回复tid=nil
++function 当前帖子标识()
++  local 链接=获取网址() or ""
++  local tid=链接:match("thread%-(%d+)") or 链接:match("tid=(%d+)")
++  return tid or 链接
++end
+ 应用栏标题.setText("加载中...").setVisibility(0)
+ 应用栏标题.setEllipsize(TextUtils.TruncateAt.MARQUEE)--设置跑马灯属性
+ 应用栏标题.setSelected(true)--设置选中状态
+@@ -39,6 +48,7 @@
+     end
+     主菜单.add("浏览器打开")
+     主菜单.add("复制链接")
++    主菜单.add("电脑版网页")
+     主菜单.add("退出页面")
+     popupMenu.onMenuItemClick=function(item)
+       switch item.title
+@@ -56,6 +66,8 @@
+         复制文本(获取网址())
+        case "网页审查"
+         进子页面(获取应用数据("默认浏览页"),{获取网址(),1})
++       case "电脑版网页"
++         打开电脑版网页()
+        case "退出页面"
+         退子页面()
+       end
+@@ -106,8 +118,11 @@
+      if (!patt.test(obj.innerHTML)) {
+     obj.innerHTML=obj.innerHTML+'&nbsp;#<a href="'+obj2.attributes["href"].nodeValue+'">'+obj2.innerHTML+'</a>';
+     }]])
+-  if 获取应用数据("自动上下页")=="true" then
+-    加载Js([[automatic_page_down();]])
++  --自动上下页改由 增强脚本 接管（预加载 + 并行抓取）
++  --注入 回复可见检测 / 评论屏蔽 / 自动上下页 脚本
++  local 注入成功,注入错误=pcall(注入帖子增强)
++  if not 注入成功 then
++    print("增强脚本注入失败："..tostring(注入错误))
+   end
+ end,nil,
+ function(_,view,webResourceRequest)
+@@ -126,6 +141,8 @@
+   local 板块2=url:match'bbs%.binmt%.cc/forum%.php%?mod=forumdisplay'
+   local 个人页=url:match'bbs%.binmt%.cc/home%.php%?mod=space&do=profile$'
+   local 用户页=url:match'bbs%.binmt%.cc/home%.php%?mod=space&uid=.+&do=profile'
++  local 用户名页=url:match'bbs%.binmt%.cc/home%.php%?mod=space&username='
++  local 空间页=url:match'bbs%.binmt%.cc/home%.php%?mod=space&uid=%d+$'
+   local 等级=url:match'bbs%.binmt%.cc/home%.php%?mod=spacecp&ac=usergroup'
+   local MT论坛=url:match'^https://bbs.binmt.cc/'
+   local 回复成功=url:match'bbs%.binmt%.cc/forum%.php%?mod=viewthread&tid=.+&page=.+&extra=&mobile=.+#pid.+'
+@@ -154,6 +171,21 @@
+     进子页面("yonghu",{url})
+     return true
+    elseif 好友表 then
++    --「@某人」/ 用户名链接在手机模板里是 space-uid-123.html。
++    --原来这里直接 return true 把跳转吞掉了：既不请求也不提示，看着就像点不动
++    local uid=url:match('space%-uid%-(%d+)%.html')
++    if uid then
++      进子页面("yonghu",{"https://bbs.binmt.cc/home.php?mod=space&uid="..uid.."&do=profile&mobile=2"})
++    end
++    return true
++   elseif 用户名页 then
++    进子页面("yonghu",{url})
++    return true
++   elseif 空间页 then
++    local uid=url:match('mod=space&uid=(%d+)')
++    if uid then
++      进子页面("yonghu",{"https://bbs.binmt.cc/home.php?mod=space&uid="..uid.."&do=profile&mobile=2"})
++    end
+     return true
+    elseif 板块 or 板块2 or 发帖子 then
+     进子页面("bankuai",{url})
+@@ -320,6 +352,46 @@
+    elseif message:match'下一页：(.-)' then
+     Load_next_page(message:match'下一页：(.+)')
+     return true
++   elseif message=="__MLITE_REPLYVISIBLE__" then
++    --网页检测到回复可见内容
++    local tid=当前帖子标识()
++    if 获取应用数据("回复可见自动回复")=="false" then
++      return true
++    end
++    if 本地已提示tid==tid then
++      if 本地自动回复tid==tid then
++        print2("自动回复可能未成功\n请手动回复后查看隐藏内容")
++      end
++      return true
++    end
++    本地已提示tid=tid
++    local 成功,错误=pcall(回复可见对话框,tid)
++    if not 成功 then
++      print("回复弹窗异常："..tostring(错误))
++    end
++    return true
++   elseif message=="__MLITE_REPLY_SUBMITTED__" then
++    --自动回复已提交
++    return true
++   elseif message=="__MLITE_REPLY_NOFORM__" then
++    print2("未找到回复框\n可能是未登录或本帖不可回复")
++    return true
++   elseif message=="__MLITE_REPLY_FAILED__" then
++    print2("自动回复失败，请手动回复")
++    return true
++   elseif message:match("^__MLITE_USER__|") then
++    --网页里点了「@某人」：打开对应的用户页
++    local 负载=message:match("^__MLITE_USER__|(.*)$") or ""
++    local uid,名字=负载:match("^(%d*)|(.*)$")
++    if uid and uid~="" then
++      进子页面("yonghu",{"https://bbs.binmt.cc/home.php?mod=space&uid="..uid.."&do=profile&mobile=2"})
++     elseif 名字 and 名字~="" then
++      进子页面("yonghu",{"https://bbs.binmt.cc/home.php?mod=space&username="..名字.."&do=profile&mobile=2"})
++    end
++    return true
++   elseif message:sub(1,8)=="__MLITE_" then
++    --其余增强模块内部消息直接吞掉，避免被当作文本弹出
++    return true
+    else
+     print(message)
+     return true

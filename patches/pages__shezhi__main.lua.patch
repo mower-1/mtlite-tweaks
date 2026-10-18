@@ -1,0 +1,110 @@
+--- a/pages/shezhi/main.lua
++++ b/pages/shezhi/main.lua
+@@ -1,6 +1,8 @@
+ require "import"
+ 使用公共lua文件("libs")
+ import "gongyong"
++import "tiezi_plus"
++import "pm_plus"
+ if !获取应用数据("娱乐功能") then
+   功能开启计数=1
+ end
+@@ -30,6 +32,13 @@
+   { __type = 1, title = "Js" },
+   { __type = 5, subtitle = "URL超链接", message = "将帖子/空间(私聊)内容中的链接自动设置超链接", status = { Checked = 获取应用数据("URL超链接") == "true" } },
+   { __type = 5, subtitle = "自动上下页", message = "帖子中自动加载上一页、下一页评论", status = { Checked = 获取应用数据("自动上下页") == "true" } },
++  { __type = 3, subtitle = "并行加载页数", message = 并行页数文本() },
++  { __type = 5, subtitle = "回复可见自动回复", message = "检测到回复可见内容时弹窗询问是否自动回复", status = { Checked = 获取应用数据("回复可见自动回复") == "true" } },
++  { __type = 3, subtitle = "自动回复内容", message = "当前：" .. (获取应用数据("自动回复内容") or "看看隐藏") },
++  { __type = 5, subtitle = "评论屏蔽", message = "楼层内容命中屏蔽词时隐藏整条楼层", status = { Checked = 获取应用数据("评论屏蔽") == "true" } },
++  { __type = 3, subtitle = "评论屏蔽词", message = 屏蔽词数量文本() },
++  { __type = 5, subtitle = "私信限速自动重发", message = "每条私信发完即开始计时，窗口内的发送自动排队到点补发", status = { Checked = 获取应用数据("私信限速自动重发") == "true" } },
++  { __type = 3, subtitle = "限速等待秒数", message = 私信等待文本() },
+   { __type = 5, subtitle = "显示FPS", message = "在网页左上角显示FPS帧率", status = { Checked = 获取应用数据("显示FPS") == "true" } },
+   { __type = 6},
+   { __type = 1, title = "其他" },
+@@ -357,6 +366,84 @@
+     简易设置功能布局(设置列表,
+     function(title,item)
+       switch(title) do
++       case "自动回复内容"
++        通用编辑框功能("自动回复内容",获取应用数据("自动回复内容") or "看看隐藏",
++        "确定","取消","重置",
++        function()
++          local 文本=tostring(edit_text.text or "")
++          if 文本=="" then
++            文本="看看隐藏"
++          end
++          存储应用数据("自动回复内容",文本)
++          item.message="当前："..文本
++          dialog.dismiss()
++          刷新设置列表()
++        end,nil,
++        function()
++          存储应用数据("自动回复内容","看看隐藏")
++          item.message="当前：看看隐藏"
++          dialog.dismiss()
++          刷新设置列表()
++        end)
++       case "并行加载页数"
++        local 页数选项 = { "1 页（省流）", "2 页（推荐）", "3 页", "4 页（最快）" }
++        local 页数对话框 = AlertDialog.Builder(activity)
++        .setTitle("并行加载页数")
++        .setSingleChoiceItems(页数选项, 初始化并行页数() - 1, { onClick = function(v, p)
++            存储应用数据("并行加载页数", tostring(p + 1))
++            item.message = 并行页数文本()
++            刷新设置列表()
++            v.dismiss()
++          end })
++        .setNegativeButton("取消", nil)
++        .show()
++       case "评论屏蔽词"
++        屏蔽词编辑对话框(function(数量文本)
++          item.message=数量文本
++          刷新设置列表()
++          if #屏蔽词列表()>0 then
++            print("已保存 "..#屏蔽词列表().." 个自定义屏蔽词\n重新进入帖子后生效")
++           else
++            print("自定义屏蔽词已清空（内置词仍然生效）")
++          end
++        end)
++       case "评论屏蔽"
++        if item.status.Checked then
++          local 数量=#屏蔽词列表()
++          if 数量==0 then
++            print2("还没有屏蔽词\n请点击“评论屏蔽词”添加")
++           else
++            print("评论屏蔽已开启\n当前 "..数量.." 个屏蔽词")
++          end
++        end
++       case "私信限速自动重发"
++        if item.status.Checked then
++          print("已开启\n发送成功后开始倒计时，窗口内再点发送会自动排队到点补发")
++         else
++          print("已关闭\n发送被限速后需要自己等一会儿再发")
++        end
++       case "限速等待秒数"
++        local 秒数选项 = { "10 秒", "16 秒（推荐）", "20 秒", "30 秒", "45 秒" }
++        local 秒数表 = { 10, 16, 20, 30, 45 }
++        local 当前秒 = 私信等待秒数()
++        local 当前项 = 2
++        for i=1,#秒数表 do
++          if 秒数表[i]==当前秒 then 当前项=i end
++        end
++        AlertDialog.Builder(activity)
++        .setTitle("限速等待秒数（固定，不自动翻倍）")
++        .setSingleChoiceItems(秒数选项, 当前项 - 1, { onClick = function(v, p)
++            存储应用数据("私信限速等待秒数", tostring(秒数表[p + 1]))
++            item.message = 私信等待文本()
++            刷新设置列表()
++            v.dismiss()
++          end })
++        .setNegativeButton("取消", nil)
++        .show()
++       case "回复可见自动回复"
++        if item.status.Checked and 获取应用数据("登录参数")==nil then
++          print2("当前未登录\n自动回复可能会失败")
++        end
+        case "编辑菜单"
+         编辑快捷菜单对话框()
+        case "检测更新"

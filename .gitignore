@@ -1,0 +1,15 @@
+# 构建产物与本地素材（不进版本库）
+build/
+base/
+*.apk
+*.fap
+*.p12
+*.jks
+*.keystore
+*.jar
+__pycache__/
+*.pyc
+*.class
+_tmp*
+.DS_Store
+Thumbs.db

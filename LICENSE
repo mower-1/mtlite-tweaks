@@ -1,0 +1,30 @@
+MIT License
+
+Copyright (c) 2026 mtlite-tweaks contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+本许可只覆盖本仓库中由本仓库作者**新增或修改**的代码（`patches/` 里的补丁、
+`tools/` 里的构建脚本、`docs/` 里的文档）。
+
+`src/fap` 与 `src/fam` 的基础部分来自第三方 App「Mt论坛Lite 重制版」，版权归其原作者
+（应用包名 `io.github.kawangya.mtforumlite`）。本仓库不主张这些部分的任何权利，
+也不分发原 App 的安装包。若原作者认为本仓库不妥，请联系删除。

@@ -1,0 +1,19 @@
+--- a/pages/bankuai/main.lua
++++ b/pages/bankuai/main.lua
+@@ -117,6 +117,7 @@
+     end
+     主菜单.add("浏览器打开")
+     主菜单.add("复制链接")
++    主菜单.add("电脑版网页")
+     主菜单.add("退出页面")
+     popupMenu.onMenuItemClick=function(item)
+       switch item.title
+@@ -130,6 +131,8 @@
+         复制文本(获取网址())
+        case "网页审查"
+         进子页面(获取应用数据("默认浏览页"),{获取网址(),1})
++       case "电脑版网页"
++         打开电脑版网页()
+        case "退出页面"
+         退子页面()
+       end

@@ -1,0 +1,19 @@
+--- a/pages/zhuye/jinghua/main.lua
++++ b/pages/zhuye/jinghua/main.lua
+@@ -33,6 +33,7 @@
+     end
+     主菜单.add("浏览器打开")
+     主菜单.add("复制链接")
++    主菜单.add("电脑版网页")
+     主菜单.add("退出页面")
+     popupMenu.onMenuItemClick=function(item)
+       switch item.title
+@@ -44,6 +45,8 @@
+         浏览器打开(获取网址())
+        case "复制链接"
+         复制文本(获取网址())
++       case "电脑版网页"
++         打开电脑版网页()
+        case "退出页面"
+         退子页面()
+       end

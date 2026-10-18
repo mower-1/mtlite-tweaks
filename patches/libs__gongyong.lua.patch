@@ -1,0 +1,190 @@
+--- a/libs/gongyong.lua
++++ b/libs/gongyong.lua
+@@ -94,6 +94,73 @@
+ if !获取应用数据("自动上下页") then
+   存储应用数据("自动上下页","false")
+ end
++if !获取应用数据("回复可见自动回复") then
++  存储应用数据("回复可见自动回复","true")
++end
++if !获取应用数据("自动回复内容") then
++  存储应用数据("自动回复内容","看看隐藏")
++end
++if !获取应用数据("评论屏蔽") then
++  存储应用数据("评论屏蔽","true")
++end
++-- 内置屏蔽词（作为一个正则整体写进“评论屏蔽词”，不需要的可以直接删掉）
++function 内置屏蔽词列表()
++  return {
++    "康康看下","看一下","看一看","看下隐藏","看看隐藏","看看内容","看隐藏",
++    "看着吧好东西","好东西","试用一下","超级喜欢",
++    "感谢分享","感谢大佬分享","感谢楼主","感谢感谢","谢谢谢谢","谢谢分享",
++    "学习学习","学习下","学习一下","膜拜大佬","大佬牛批","牛批牛批",
++    "厉害厉害","太给力了","恭喜恭喜","支持下","支持一下",
++    "论坛有你更美好","论坛有你更精彩","试试看吧","太棒了","太强了","太好了",
++    "太强啦","太棒啦","拿走了","快快","大佬牛逼","大佬厉害","厉害了",
++    "瞅瞅","学习","看看","试试","优秀","谢谢","大佬","测试","好的",
++    "给力","来了","感谢","look","看下","不错","牛","厉害","路过",
++  }
++end
++
++-- 内置词合并成一条正则（| 表示或，包含匹配，不是完全匹配）
++function 内置屏蔽词正则()
++  local 词表 = 内置屏蔽词列表()
++  return table.concat(词表, "|")
++end
++
++-- 版本号：以后改了内置词就加一，升级时会自动替换旧的内置正则
++function 内置屏蔽词版本()
++  return "3"
++end
++
++-- 预置：把内置正则写进屏蔽词设置。旧版本写进去的那一条会被换掉，用户自己的词保留
++if 获取应用数据("屏蔽词预置") ~= 内置屏蔽词版本() then
++  local 现有 = 获取应用数据("评论屏蔽词") or ""
++  local 保留 = {}
++  for 行 in 现有:gmatch("[^\r\n]+") do
++    local 干净 = 行:gsub("^%s+", ""):gsub("%s+$", "")
++    -- 每版内置正则都以“康康看下|”开头，据此把旧的那条丢掉
++    if 干净 ~= "" and not 干净:find("^康康看下|", 1) then
++      table.insert(保留, 行)
++    end
++  end
++  table.insert(保留, 内置屏蔽词正则())
++  存储应用数据("评论屏蔽词", table.concat(保留, "\n"))
++  存储应用数据("屏蔽词预置", 内置屏蔽词版本())
++end
++
++if !获取应用数据("并行加载页数") then
++  存储应用数据("并行加载页数","2")
++end
++if !获取应用数据("私信限速自动重发") then
++  存储应用数据("私信限速自动重发","true")
++end
++if !获取应用数据("私信限速等待秒数") then
++  存储应用数据("私信限速等待秒数","16")
++end
++-- 旧默认值 15 秒统一提到 16 秒（只迁移一次）
++if 获取应用数据("私信秒数版本")~="16" then
++  if 获取应用数据("私信限速等待秒数")=="15" then
++    存储应用数据("私信限速等待秒数","16")
++  end
++  存储应用数据("私信秒数版本","16")
++end
+ if !获取应用数据("自动签到") then
+   存储应用数据("自动签到","false")
+ end
+@@ -133,6 +200,113 @@
+ end
+ if !获取应用数据("电脑UA") then
+   存储应用数据("电脑UA","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
++end
++
++-- ============================ 电脑版网页 ============================
++-- 页面右上角三个点 → 电脑版网页：用现成的「浏览页PC」打开当前地址。
++-- 那个页面的 UA 就是 拓展功能 → 电脑UA，界面也沿用它的（全屏/手机模式/网页审查都在它的菜单里）。
++-- 注意：手机版地址大多带 mobile=2，会强制触屏模板，得换成 mobile=no 才能真正出电脑版。
++
++function 电脑版网址(链接)
++  local u = tostring(链接 or "")
++  if u == "" then return u end
++  if u:find("[?&]mobile=2") then
++    return (u:gsub("([?&])mobile=2", "%1mobile=no"))
++  end
++  return u
++end
++
++function 手机版网址(链接)
++  local u = tostring(链接 or "")
++  if u == "" then return u end
++  return (u:gsub("([?&])mobile=no", "%1mobile=2"))
++end
++
++-- 论坛可能把「用电脑版」记在 cookie 里（名字里含 mobile），不清掉的话
++-- 就算 URL 改回 mobile=2、UA 换回手机，服务端照样给电脑版模板。
++function 重置手机版Cookie()
++  pcall(function()
++    local CookieManager = luajava.bindClass("android.webkit.CookieManager")
++    local 管理器 = CookieManager.getInstance()
++    local 地址 = "https://bbs.binmt.cc/"
++    local 原 = 管理器.getCookie(地址) or ""
++    for kv in 原:gmatch("[^;]+") do
++      local 名 = kv:match("^%s*([^=]+)=")
++      if 名 and 名:lower():find("mobile") then
++        管理器.setCookie(地址, 名 .. "=; path=/; max-age=0")
++      end
++    end
++  end)
++end
++
++--判断两个地址是不是同一页（忽略 mobile 参数和 # 锚点，用来判断「有没有翻到别的页面」）
++function 同一网页(甲, 乙)
++  local function 规范(u)
++    u = tostring(u or "")
++    u = u:gsub("#.*$", "")
++    u = u:gsub("([?&])mobile=[^&]*", "")
++    u = u:gsub("%?&", "?")
++    u = u:gsub("&&", "&")
++    u = u:gsub("[?&]+$", "")
++    u = u:gsub("^http://", "https://")
++    return u
++  end
++  local a, b = 规范(甲), 规范(乙)
++  if a == "" or b == "" then return false end
++  return a == b
++end
++
++--用 App 自己的页面打开一个手机版地址（帖子/板块/用户页/登录/签到），能接手就返回 true
++function 用手机版页面打开(链接)
++  local u = tostring(链接 or "")
++  if u == "" or u:find("^file://") then return false end
++  local 帖子 = u:match("thread%-%d+%-%d+%-%d+%.html") or u:find("mod=viewthread") or u:find("[?&]tid=%d+")
++  local 板块 = u:match("forum%-%d+%-%d+%.html") or u:find("mod=forumdisplay")
++  local 登录 = u:find("member%.php%?mod=logging") or u:find("mod=logging&action=login")
++  local 签到 = u:find("k_misign")
++  local 用户 = u:find("mod=space&uid=") or u:find("mod=space&do=profile")
++  if 登录 then
++    进子页面("denglu")
++    退出页面()
++    return true
++  end
++  if 帖子 then
++    进子页面("tiezi", {u})
++    退出页面()
++    return true
++  end
++  if 板块 then
++    进子页面("bankuai", {u})
++    退出页面()
++    return true
++  end
++  if 签到 then
++    进子页面("qiandao")
++    退出页面()
++    return true
++  end
++  if 用户 then
++    进子页面("yonghu", {u})
++    退出页面()
++    return true
++  end
++  return false
++end
++
++function 打开电脑版网页(链接)
++  local u = tostring(链接 or 获取网址() or "")
++  if u == "" then u = "https://bbs.binmt.cc/" end
++  if u:find("^file://") then
++    print("本地页面没有电脑版")
++    return
++  end
++  --「首页（导读-热帖）」和「社区列表」在电脑版没有对应页面：
++  --直接拿原地址进电脑版会落到导读页，统一改成论坛首页 forum.php
++  local 主机 = u:match("^(https?://[^/]+)") or "https://bbs.binmt.cc"
++  if u:find("view=hot") or u:find("forumlist=1") then
++    u = 主机 .. "/forum.php"
++  end
++  进子页面("liulanyepc",{电脑版网址(u)})
+ end
+ if !获取应用数据("默认浏览页") then
+   存储应用数据("默认浏览页","liulanye")

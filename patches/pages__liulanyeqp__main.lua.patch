@@ -1,0 +1,72 @@
+--- a/pages/liulanyeqp/main.lua
++++ b/pages/liulanyeqp/main.lua
+@@ -26,8 +26,46 @@
+   end
+ end
+ 传递数据,网页审查=...
++--进来时的那一页，用来判断用户有没有在本页里翻到别的页面
++入口网址=tostring(传递数据 or "")
++--手机版 / 电脑版都在本页切换，不跳别的页面
++当前电脑版=false
++function 应用全屏模式(是否电脑版)
++  当前电脑版=是否电脑版
++  local ua=是否电脑版 and 获取应用数据("电脑UA") or 获取应用数据("手机UA")
++  local function 套(b)
++    pcall(function()
++      local 设置=b.getSettings()
++      设置.setUserAgentString(ua)
++      设置.setUseWideViewPort(是否电脑版)
++      设置.setLoadWithOverviewMode(是否电脑版)
++    end)
++  end
++  pcall(function() 套(获取浏览器()) end)
++  pcall(function() 套(获取浏览器(0)) end)
++  if not 是否电脑版 then 重置手机版Cookie() end
++  local u=获取网址() or ""
++  if u=="" or u=="about:blank" then u=传递数据 or "" end
++  if 是否电脑版 then u=电脑版网址(u) else u=手机版网址(u) end
++  加载网页(nil,u)
++end
++--回到手机版：还是进来时那一页，就直接关掉本页，回到带导航栏的页面（不重新加载）；
++--已经翻到别的页面了，才在本页切回手机版
++function 回到手机版()
++  重置手机版Cookie()
++  local 当前=获取网址() or ""
++  if 同一网页(当前,入口网址) then
++    退子页面()
++    return
++  end
++  应用全屏模式(false)
++end
+ if 传递数据 then
+-  加载网页(nil,传递数据)
++  if 传递数据:find("mobile=no") then
++    应用全屏模式(true)
++   else
++    加载网页(nil,传递数据)
++  end
+  else
+   退子页面()
+ end
+@@ -65,19 +103,9 @@
+     popupMenu.onMenuItemClick=function(item)
+       switch item.title
+        case "手机模式"
+-        if 网页审查 then
+-          进子页面("liulanye",{获取网址(),1})
+-         else
+-          进子页面("liulanye",{获取网址()})
+-        end
+-        退出页面()
++        回到手机版()
+        case "电脑模式"
+-        if 网页审查 then
+-          进子页面("liulanyepc",{获取网址(),1})
+-         else
+-          进子页面("liulanyepc",{获取网址()})
+-        end
+-        退出页面()
++        应用全屏模式(true)
+        case "切换Eruda"
+         存储应用数据("网页审查",1)
+         刷新网页()

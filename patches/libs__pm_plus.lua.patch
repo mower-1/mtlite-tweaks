@@ -1,0 +1,891 @@
+--- /dev/null
++++ b/libs/pm_plus.lua
+@@ -0,0 +1,888 @@
++-- 私信增强模块（限速自动重发）
++--
++-- 抓包事实：私信发送走插件 forum_rate_limit 的 XHR POST，被拦时不跳转，
++--   只在页面中央弹一个 #frl-notice 提示“两次发送短消息太快，请稍后再发送”，
++--   响应体 {forum_rate_limit:1, ok:true|false, message:"…"}。
++--   **服务端不返回“还剩多少秒”**，所以剩余时间只能自己记。
++--
++-- 计时模型（固定窗口，不校准、不翻倍）
++--   · 每成功发出一条私信 → 记录 last_ok
++--   · 可再次发送的时刻 = last_ok + 设置里的秒数（默认 16 秒）
++--   · 窗口内再点发送 → 拦下来入队，倒计时 = 窗口剩余
++--       例：成功后第 3 秒再发 → 显示 12 秒；第 10 秒再发 → 显示 5 秒
++--   · 到点自动发出；若这次仍被服务端拒绝 → 弹窗说明并把这条标成“被拒”，
++--     等用户手动点“重发”，不再自动翻倍重试（避免无限循环）
++--
++-- 界面：直接在网页里画一张固定卡片（页面内渲染，真机上一定看得见）
++--   原生层只负责存状态、决定队列时间、弹说明框
++
++import "android.widget.TextView"
++import "android.widget.LinearLayout"
++import "android.os.Handler"
++import "android.os.Looper"
++import "java.lang.Runnable"
++
++-- 延时执行（优先用框架的 task，退而用主线程 Handler）
++local 私信处理器 = nil
++function 私信延时(毫秒数, 回调)
++  if pcall(function() task(毫秒数, 回调) end) then return true end
++  return pcall(function()
++    if not 私信处理器 then 私信处理器 = Handler(Looper.getMainLooper()) end
++    私信处理器.postDelayed(Runnable({ run = 回调 }), 毫秒数)
++  end)
++end
++
++-- ============================ 配置 ============================
++
++function 私信自动重发开关()
++  return 获取应用数据("私信限速自动重发") ~= "false"
++end
++
++-- 固定等待秒数（不再“校准”）
++function 私信预估秒数()
++  local n = tonumber(获取应用数据("私信限速等待秒数") or "16") or 16
++  if n < 5 then n = 5 end
++  if n > 600 then n = 600 end
++  return math.floor(n)
++end
++
++function 私信等待秒数()
++  return 私信预估秒数()
++end
++
++function 私信窗口毫秒()
++  return 私信等待秒数() * 1000
++end
++
++-- ============================ 状态 ============================
++-- last_ok : 上一次发送成功的毫秒时间戳（计时起点）
++-- q[]     : 待发送队列 { id, t=文本, u=会话地址, d=计划发送时间, sent=正在发送的时间, fail=被拒 }
++
++local 状态键 = "私信发送状态"
++
++local function 毫秒()
++  return System.currentTimeMillis()
++end
++
++local function 解析json(s)
++  if not s or s == "" then return nil end
++  local cjson = require("cjson")
++  local 成功, 结果 = pcall(cjson.decode, s)
++  if 成功 and type(结果) == "table" then return 结果 end
++  return nil
++end
++
++function 私信状态()
++  local 状态 = 解析json(获取应用数据(状态键)) or {}
++  if type(状态.last_ok) ~= "number" then 状态.last_ok = 0 end
++  if type(状态.q) ~= "table" then 状态.q = {} end
++  if type(状态.seq) ~= "number" then 状态.seq = 0 end
++  for i = #状态.q, 1, -1 do
++    local it = 状态.q[i]
++    if type(it) ~= "table" or not it.t then table.remove(状态.q, i) end
++  end
++  return 状态
++end
++
++function 私信保存(状态)
++  local cjson = require("cjson")
++  local 成功, 文本 = pcall(cjson.encode, 状态)
++  if 成功 then 存储应用数据(状态键, 文本) end
++end
++
++-- 距离可以再次发送还有几秒（0 = 现在就能发）
++function 私信剩余秒()
++  local 状态 = 私信状态()
++  local 左 = (tonumber(状态.last_ok) or 0) + 私信窗口毫秒() - 毫秒()
++  if 左 < 0 then 左 = 0 end
++  return math.ceil(左 / 1000)
++end
++
++function 私信等待文本()
++  return "固定 " .. 私信等待秒数() .. " 秒（到点自动发送，不会自动翻倍）"
++end
++
++-- ============================ 队列 ============================
++
++-- 按 last_ok 重排未发送项的发送时间：第 n 条 = last_ok + n×窗口
++function 重排队列(状态)
++  local win = 私信窗口毫秒()
++  local now = 毫秒()
++  local base = tonumber(状态.last_ok) or 0
++  if base < now - win then base = now - win end     -- 上次成功已经很久，第一条立刻发
++  for _, it in ipairs(状态.q) do
++    if it.fail then
++      -- 被拒的项不占用时间轴，等用户手动重发
++    elseif (tonumber(it.sent) or 0) > 0 then
++      -- 正在发送中，不推进基准
++    else
++      base = base + win
++      it.d = base
++    end
++  end
++  return 状态
++end
++
++local function 私信入队(文本, 网址)
++  local 状态 = 私信状态()
++  local 末 = 状态.q[#状态.q]
++  if 末 and 末.t == 文本 and (tonumber(末.sent) or 0) == 0 and not 末.fail then
++    return 状态                              -- 同样的内容正在等待，不重复加
++  end
++  状态.seq = (tonumber(状态.seq) or 0) + 1
++  table.insert(状态.q, {
++    id = 状态.seq,
++    t = 文本,
++    u = 网址 or "",
++    d = 0,
++  })
++  重排队列(状态)
++  私信保存(状态)
++  私信推送()
++  return 状态
++end
++
++-- ============================ 说明弹窗 ============================
++
++local function 弹说明(标题, 内容)
++  local function 显示()
++    local ok = pcall(function()
++      local 视图 = {
++        LinearLayout,
++        layout_width = "match",
++        orientation = 1,
++        padding = "20dp",
++        {
++          TextView,
++          text = 内容,
++          textSize = "14sp",
++          textColor = 主文本色 or "#FF1A1A1C",
++        },
++      }
++      AlertDialog.Builder(activity)
++      .setTitle(标题)
++      .setView(loadlayout(视图))
++      .setPositiveButton("知道了", nil)
++      .show()
++    end)
++    if not ok then print(标题 .. "：" .. 内容) end
++  end
++  local ok = pcall(function()
++    activity.runOnUiThread(Runnable({ run = 显示 }))
++  end)
++  if not ok then 显示() end
++end
++
++-- ============================ JS → 原生消息 ============================
++
++-- 同一条消息可能同时从 alert 回调和轮询进来，1.5 秒内相同内容只处理一次
++local 最近处理 = {}
++
++local function 重复消息(message)
++  local now = 毫秒()
++  local 保留 = {}
++  local 命中 = false
++  for _, x in ipairs(最近处理) do
++    if now - x.t < 1500 then
++      table.insert(保留, x)
++      if x.m == message then 命中 = true end
++    end
++  end
++  if not 命中 then table.insert(保留, { m = message, t = now }) end
++  最近处理 = 保留
++  return 命中
++end
++
++function 私信处理消息(message)
++  message = tostring(message or "")
++  if message:sub(1, 11) ~= "__MLITE_PM_" then return false end
++  local 类型, 负载 = message:match("^__MLITE_PM_([A-Z]+)|(.*)$")
++  if not 类型 then
++    类型 = message:match("^__MLITE_PM_([A-Z]+)$")
++    负载 = ""
++  end
++  if not 类型 then return false end
++  if 重复消息(message) then return true end
++
++  local now = 毫秒()
++  local 状态 = 私信状态()
++
++  if 类型 == "H" then
++    --注入成功：静默忽略（以前会弹一次「私信自动重发已启用」，设置里能控制，不必每次提示）
++    return true
++
++  elseif 类型 == "OK" then
++    -- 发送成功：从现在开始重新计时
++    状态.last_ok = now
++    重排队列(状态)
++    私信保存(状态)
++    私信推送()
++    return true
++
++  elseif 类型 == "L" then
++    -- 服务端拒绝（太快）
++    local 数据 = 解析json(负载) or {}
++    if 数据.id then
++      -- 到点自动重发那条仍被拒：标成“被拒”，不再自动重试
++      for _, it in ipairs(状态.q) do
++        if tonumber(it.id) == tonumber(数据.id) then
++          it.sent = 0
++          it.fail = 1
++          it.d = now
++        end
++      end
++      私信保存(状态)
++      私信推送()
++      弹说明("自动重发仍被拒绝",
++        "已经等满 " .. 私信等待秒数() .. " 秒，服务端还是提示“两次发送短消息太快”。\n\n" ..
++        "说明论坛那边的真实间隔比设置更长。这条消息已保留，在悬浮卡片里点“重发”可以再试一次，" ..
++        "也可以稍等一会儿手动发送。\n\n如果经常遇到，可以把 设置 → 限速等待秒数 调大一些。")
++    else
++      -- 正常发送被拒（说明设定窗口比真实限制短）：从现在起重新计时，并排一次队
++      状态.last_ok = now
++      私信保存(状态)
++      if 数据.t and 数据.t ~= "" then
++        私信入队(数据.t, 数据.u)
++      else
++        重排队列(状态)
++        私信保存(状态)
++        私信推送()
++      end
++      print("服务端仍限速\n已按 " .. 私信等待秒数() .. " 秒重新排队，到点自动发一次")
++    end
++    return true
++
++  elseif 类型 == "Q" then
++    -- 窗口内点了发送：已拦下，入队
++    local 数据 = 解析json(负载) or {}
++    if 数据.t and 数据.t ~= "" then 私信入队(数据.t, 数据.u) end
++    return true
++
++  elseif 类型 == "T" then
++    -- 开始自动发送第 id 条
++    local id = tonumber(负载)
++    for _, it in ipairs(状态.q) do
++      if tonumber(it.id) == id then it.sent = now; it.fail = nil end
++    end
++    私信保存(状态)
++    私信推送()
++    return true
++
++  elseif 类型 == "D" then
++    -- 第 id 条已成功发出：出队 + 重新计时
++    local id = tonumber(负载)
++    for i = #状态.q, 1, -1 do
++      if tonumber(状态.q[i].id) == id then table.remove(状态.q, i) end
++    end
++    状态.last_ok = now
++    重排队列(状态)
++    私信保存(状态)
++    私信推送()
++    return true
++
++  elseif 类型 == "N" then
++    -- 点了发送却没反应（按钮点不动）：标成被拒，交回用户
++    local id = tonumber(负载)
++    for _, it in ipairs(状态.q) do
++      if tonumber(it.id) == id then it.sent = 0; it.fail = 1; it.d = now end
++    end
++    私信保存(状态)
++    私信推送()
++    return true
++
++  elseif 类型 == "X" then
++    -- 发送后长时间没回音
++    local id = tonumber(负载)
++    for _, it in ipairs(状态.q) do
++      if tonumber(it.id) == id then it.sent = 0; it.fail = 1; it.d = now end
++    end
++    私信保存(状态)
++    私信推送()
++    return true
++
++  elseif 类型 == "C" then
++    -- 取消排队
++    local id = tonumber(负载)
++    for i = #状态.q, 1, -1 do
++      if tonumber(状态.q[i].id) == id then table.remove(状态.q, i) end
++    end
++    重排队列(状态)
++    私信保存(状态)
++    私信推送()
++    print("已取消这条待发送的私信")
++    return true
++
++  elseif 类型 == "R" then
++    -- 手动重发被拒的那条：立刻到点
++    local id = tonumber(负载)
++    for _, it in ipairs(状态.q) do
++      if tonumber(it.id) == id then
++        it.fail = nil
++        it.sent = 0
++        it.d = now
++      end
++    end
++    私信保存(状态)
++    私信推送()
++    return true
++
++  elseif 类型 == "F" then
++    local 数据 = 解析json(负载) or {}
++    if 数据.m and 数据.m ~= "" then print(数据.m) end
++    return true
++  end
++
++  return true
++end
++
++-- ============================ 推送 / 注入 ============================
++
++local function 队列json(状态)
++  local cjson = require("cjson")
++  local 项 = {}
++  for _, it in ipairs(状态.q) do
++    table.insert(项, string.format(
++      "{id:%d,t:%s,u:%s,d:%d,sent:%d,fail:%d}",
++      math.floor(tonumber(it.id) or 0),
++      cjson.encode(tostring(it.t or "")),
++      cjson.encode(tostring(it.u or "")),
++      math.floor(tonumber(it.d) or 0),
++      math.floor(tonumber(it.sent) or 0),
++      it.fail and 1 or 0))
++  end
++  return string.format("{win:%d,last:%d,now:%d,q:[%s]}",
++    math.floor(私信窗口毫秒()),
++    math.floor(tonumber(状态.last_ok) or 0),
++    math.floor(毫秒()),
++    table.concat(项, ","))
++end
++
++function 私信推送()
++  local ok = pcall(function()
++    加载Js("window.__mlitePmSet&&window.__mlitePmSet(" .. 队列json(私信状态()) .. ")")
++  end)
++  return ok
++end
++
++-- 备用通道：JS 把消息同时塞进 window.__mlitePmOut，原生定时取回。
++-- 网页提示框（alert）回调万一没接上，靠这条通道也能正常倒计时。
++local 轮询中, 轮询次数 = false, 0
++
++function 私信开始轮询()
++  if 轮询中 then return end
++  轮询中 = true
++  轮询次数 = 0
++  local function 步()
++    轮询次数 = 轮询次数 + 1
++    if 轮询次数 > 900 then 轮询中 = false; return end
++    local 发出 = pcall(function()
++      加载Js([[(function(){var a=window.__mlitePmOut||[];if(!a.length)return "";window.__mlitePmOut=[];return JSON.stringify(a);})()]],
++        function(结果)
++          if not 结果 or 结果 == "" or 结果 == "null" or 结果 == '""' then return end
++          local 内层 = 解析json(结果)
++          local 列表 = 内层
++          if type(内层) == "string" then 列表 = 解析json(内层) end
++          if type(列表) ~= "table" then return end
++          for _, x in ipairs(列表) do
++            local m = x and x.m
++            if type(m) == "string" and m:sub(1, 11) == "__MLITE_PM_" then
++              轮询次数 = 0
++              私信处理消息(m)
++            end
++          end
++        end)
++    end)
++    if not 发出 then 轮询中 = false; return end
++    私信延时(700, 步)
++  end
++  私信延时(700, 步)
++end
++
++local 私信脚本 = [==[
++(function () {
++  if (window.__mlitePmInit) {
++    if (window.__mlitePmSet && window.__mlitePmCfg) window.__mlitePmSet(window.__mlitePmCfg);
++    return;
++  }
++  var CFG = window.__mlitePmCfg || {};
++  if (!CFG.auto) return;
++  window.__mlitePmInit = 1;
++
++  var D = document;
++  var S = {
++    win: parseInt(CFG.win, 10) || 16000,
++    last: parseInt(CFG.last, 10) || 0,
++    q: CFG.q || []
++  };
++  var autoId = 0, lastText = '', lastHtml = '', cardEl = null;
++  var NUM = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨'];
++
++  function report(m) {
++    m = String(m);
++    try {
++      window.__mlitePmOut = window.__mlitePmOut || [];
++      window.__mlitePmOut.push({ m: m });
++      if (window.__mlitePmOut.length > 60) window.__mlitePmOut.shift();
++    } catch (e) {}
++    try { alert(m); } catch (e) {}
++  }
++
++  function conv(u) {
++    var m = String(u || '').match(/[?&]touid=(\d+)/);
++    return m ? m[1] : '';
++  }
++  var MY = conv(location.href);
++
++  function box() {
++    return D.querySelector('#needmessage') ||
++           D.querySelector('#pmform input[name="message"]') ||
++           D.querySelector('#pmform textarea[name="message"]') ||
++           D.querySelector('form[action*="ac=pm"] input[name="message"]') ||
++           D.querySelector('form[action*="ac=pm"] textarea') ||
++           D.querySelector('input[name="message"]') ||
++           D.querySelector('textarea');
++  }
++  function btn() {
++    return D.querySelector('#pmsubmit') ||
++           D.querySelector('#pmform input[type="button"]') ||
++           D.querySelector('#pmform [comiis="handle"]') ||
++           D.querySelector('#pmform button, #pmform input[type="submit"]');
++  }
++  function isPmSend(f) {
++    if (!f) return false;
++    var a = String(f.action || '');
++    return /home\.php/.test(a) && /ac=pm/.test(a) && /op=send/.test(a);
++  }
++  function setVal(el, text) {
++    try {
++      var proto = String(el.tagName).toUpperCase() === 'TEXTAREA'
++        ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
++      var desc = Object.getOwnPropertyDescriptor(proto, 'value');
++      if (desc && desc.set) desc.set.call(el, text); else el.value = text;
++    } catch (e) { try { el.value = text; } catch (e2) {} }
++    try {
++      el.dispatchEvent(new Event('input', { bubbles: true }));
++      el.dispatchEvent(new Event('change', { bubbles: true }));
++    } catch (e) {}
++  }
++  function toast(msg) {
++    if (!D.body) return;
++    var t = D.createElement('div');
++    t.textContent = msg;
++    t.style.cssText = 'position:fixed;left:50%;bottom:80px;transform:translateX(-50%);z-index:2147483001;' +
++      'background:rgba(0,0,0,.86);color:#fff;font-size:13px;padding:8px 16px;border-radius:18px;' +
++      'font-family:system-ui,-apple-system,sans-serif;max-width:86vw;text-align:center;';
++    D.body.appendChild(t);
++    setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
++  }
++  function esc(s) {
++    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
++  }
++  function cut(s, n) {
++    s = String(s || '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
++    var a = s.split('');
++    var r = a.slice(0, n).join('');
++    return a.length > n ? r + '…' : r;
++  }
++
++  /* ---------- 剩余时间（自己记，服务端不给） ---------- */
++  function leftMs() {
++    if (!S.last) return 0;
++    var w = S.win || 16000;
++    return Math.max(0, S.last + w - Date.now());
++  }
++  function leftSec() { return Math.ceil(leftMs() / 1000); }
++
++  /* ---------- 悬浮卡片（页面内渲染） ---------- */
++  function hideCard() {
++    if (cardEl && cardEl.parentNode) cardEl.parentNode.removeChild(cardEl);
++    cardEl = null;
++    lastHtml = '';
++  }
++  function card() {
++    if (cardEl && cardEl.parentNode) return cardEl;
++    if (!D.body) return null;
++    var d = D.createElement('div');
++    d.id = 'mlite-pm-card';
++    d.style.cssText = 'position:fixed;left:10px;bottom:118px;z-index:2147483000;max-width:78vw;' +
++      'background:rgba(26,26,28,.94);color:#fff;border-radius:12px;padding:9px 12px;' +
++      'font:12.5px/1.55 system-ui,-apple-system,"PingFang SC",sans-serif;' +
++      'box-shadow:0 6px 20px rgba(0,0,0,.35);-webkit-user-select:none;';
++    d.addEventListener('click', function (ev) {
++      var t = ev.target;
++      if (!t || !t.getAttribute) return;
++      var c = t.getAttribute('data-c'), r = t.getAttribute('data-r');
++      if (c) { ev.preventDefault(); ev.stopPropagation(); report('__MLITE_PM_C|' + c); return; }
++      if (r) { ev.preventDefault(); ev.stopPropagation(); report('__MLITE_PM_R|' + r); }
++    }, true);
++    D.body.appendChild(d);
++    cardEl = d;
++    return d;
++  }
++  function render() {
++    var now = Date.now(), rows = [], i, it, line, left = leftMs();
++    for (i = 0; i < S.q.length; i++) {
++      it = S.q[i];
++      if (!it || !it.t) continue;
++      if (conv(it.u) && conv(it.u) !== MY) continue;
++      if (it.fail) {
++        line = '被拒 · <span data-r="' + it.id + '" style="color:#7DB3FF">点此重发</span>';
++      } else if (it.sent) {
++        line = '正在发送…';
++      } else {
++        line = Math.max(0, Math.ceil(((it.d || 0) - now) / 1000)) + ' 秒后自动发送';
++      }
++      rows.push('<div style="margin-top:' + (rows.length ? 4 : 0) + 'px">' +
++        (NUM[i] || ('(' + (i + 1) + ')')) + ' ' + line + ' · ' + esc(cut(it.t, 10)) +
++        ' <span data-c="' + it.id + '" style="color:#FF8A80;margin-left:7px">取消</span></div>');
++    }
++    if (!rows.length && left > 0) {
++      rows.push('<div style="opacity:.9">距可再次发送 <b style="color:#7DB3FF">' +
++        Math.ceil(left / 1000) + '</b> 秒</div>');
++    }
++    if (!rows.length) { hideCard(); return; }
++    var html = rows.join('');
++    if (html === lastHtml) return;
++    var c = card();
++    if (!c) return;
++    c.innerHTML = html;
++    lastHtml = html;
++  }
++
++  /* ---------- 1. 点发送 ---------- */
++  function nearSend(el) {
++    var n = el, g = 0;
++    while (n && n !== D && g++ < 6) {
++      var tag = String(n.tagName || '').toUpperCase();
++      var typ = n.getAttribute ? (n.getAttribute('type') || '') : '';
++      if (n.id === 'pmsubmit' ||
++          (n.getAttribute && n.getAttribute('comiis') === 'handle') ||
++          tag === 'BUTTON' ||
++          (tag === 'INPUT' && (typ === 'submit' || typ === 'button'))) return n;
++      n = n.parentNode;
++    }
++    return null;
++  }
++  window.addEventListener('click', function (ev) {
++    var b = nearSend(ev.target);
++    if (!b) return;
++    var f = b.form || (b.closest ? b.closest('form') : null);
++    if (!isPmSend(f)) return;
++    if (autoId) return;                        /* 自动发送放行 */
++    var el = box();
++    var text = el ? String(el.value || '') : '';
++    if (!text.replace(/\s+/g, '')) return;     /* 空内容交给插件自己提示 */
++    lastText = text;
++    var left = leftMs();
++    if (left <= 0) { sendingText = text; return; }   /* 窗口外：照常发，成功后重新计时 */
++    ev.preventDefault();
++    ev.stopPropagation();
++    if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
++    report('__MLITE_PM_Q|' + JSON.stringify({ t: text, u: location.href }));
++    try { setVal(el, ''); } catch (e) {}
++    toast('还要等 ' + Math.ceil(left / 1000) + ' 秒，这条已加入队列');
++  }, true);
++
++  /* 回车提交也拦一道 */
++  D.addEventListener('submit', function (ev) {
++    if (autoId) return;
++    if (!isPmSend(ev.target)) return;
++    var el = box();
++    var text = el ? String(el.value || '') : '';
++    if (!text.replace(/\s+/g, '')) return;
++    lastText = text;
++    var left = leftMs();
++    if (left <= 0) { sendingText = text; return; }
++    ev.preventDefault();
++    ev.stopPropagation();
++    if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
++    report('__MLITE_PM_Q|' + JSON.stringify({ t: text, u: location.href }));
++    try { setVal(el, ''); } catch (e) {}
++    toast('还要等 ' + Math.ceil(left / 1000) + ' 秒，这条已加入队列');
++  }, true);
++
++  /* ---------- 2. 读发送结果 ---------- */
++
++  /* 这个 App 里发送走 XHR，页面自己不会把新消息画出来，必须手动刷新才看得到。
++     这里在发送成功后重新抓一次当前会话，把 #comiis_pm_list 的内容换掉，等效于刷新但不用整页重载。 */
++  var pmRefreshing = 0, pendingDraft = '', pendingSent = '', sendingText = '';
++
++  function scrollPmBottom() {
++    try {
++      var b = D.querySelector('.comiis_msgbox');
++      if (b) b.scrollTop = b.scrollHeight;
++      window.scrollTo(0, D.body.scrollHeight);
++    } catch (e) {}
++  }
++  /* 草稿存取：整页重载时不能把用户正在打的字弄丢 */
++  function saveDraft() {
++    try {
++      var el = box();
++      var v = el ? String(el.value || '') : '';
++      if (!v.replace(/\s+/g, '')) { sessionStorage.removeItem('mlite_pm_draft'); return; }
++      sessionStorage.setItem('mlite_pm_draft', JSON.stringify({ u: MY, v: v }));
++    } catch (e) {}
++  }
++  function restoreDraft() {
++    try {
++      var raw = sessionStorage.getItem('mlite_pm_draft');
++      if (!raw) return;
++      sessionStorage.removeItem('mlite_pm_draft');
++      var d = JSON.parse(raw);
++      if (!d || String(d.u) !== MY || !d.v) return;
++      var el = box();
++      if (el) setVal(el, d.v);
++    } catch (e) {}
++  }
++  function hardReload() {
++    pmRefreshing = 0;
++    saveDraft();
++    try {
++      sessionStorage.setItem('mlite_pm_after', MY);
++      location.reload();
++    } catch (e) {}
++  }
++  function refreshPmList(tryTimes, expect) {
++    tryTimes = tryTimes || 0;
++    if (!MY) { pmRefreshing = 0; return; }             /* 不是会话页，没什么可刷 */
++    if (!D.querySelector('#comiis_pm_list')) { hardReload(); return; }
++    var fail = function () {
++      if (tryTimes < 1) setTimeout(function () { refreshPmList(tryTimes + 1, expect); }, 900);
++      else hardReload();
++    };
++    try {
++      var u = location.href.split('#')[0];
++      u += (u.indexOf('?') < 0 ? '?' : '&') + '_mliter=' + Date.now();   /* 绕过 WebView 缓存 */
++      var xhr = new XMLHttpRequest();
++      xhr.open('GET', u, true);
++      try { xhr.setRequestHeader('Cache-Control', 'no-cache'); } catch (e) {}
++      xhr.onload = function () {
++        var doc = null;
++        try {
++          doc = new DOMParser().parseFromString(String(xhr.responseText || ''), 'text/html');
++        } catch (e) { fail(); return; }
++        var fresh = doc && doc.querySelector('#comiis_pm_list');
++        var cur = D.querySelector('#comiis_pm_list');
++        if (!fresh || !cur) { fail(); return; }
++        cur.innerHTML = fresh.innerHTML;
++        scrollPmBottom();
++        pmRefreshing = 0;
++        /* 抓回来的内容里没有刚发的那句 → 说明抓到的是缓存/旧页，再试一次，仍没有就整页刷新兜底 */
++        if (expect) {
++          var t = String(expect).replace(/\s+/g, '');
++          var got = String(cur.textContent || D.body.textContent || '').replace(/\s+/g, '');
++          if (t && t.length > 3 && got.indexOf(t.slice(0, 12)) < 0) {
++            if (tryTimes < 1) setTimeout(function () { refreshPmList(tryTimes + 1, expect); }, 900);
++            else hardReload();
++          }
++        }
++      };
++      xhr.onerror = fail;
++      xhr.send();
++    } catch (e) { fail(); }
++  }
++  function afterSendRefresh(expect) {
++    if (pmRefreshing) return;
++    pmRefreshing = 1;
++    setTimeout(function () { refreshPmList(0, expect); }, 450);
++    setTimeout(function () { pmRefreshing = 0; }, 9000);   /* 兜底，别一直锁着 */
++  }
++  /* 自动发送会临时占用输入框，发完把用户原来的草稿放回去 */
++  function restoreDraftAfterSend() {
++    var d = pendingDraft, sent = pendingSent;
++    pendingDraft = '';
++    pendingSent = '';
++    if (!d) return;
++    var el = box();
++    if (!el) return;
++    var cur = String(el.value || '');
++    /* 框里还是刚自动发出去的那句（或已被清空）才把草稿放回去，用户已经改了就不动 */
++    if (!cur.replace(/\s+/g, '') || cur === sent) setVal(el, d);
++  }
++
++  function hideNotice() {
++    var n = D.getElementById('frl-notice');
++    if (!n) return;
++    var t = String(n.textContent || '');
++    if (t && !/太快/.test(t)) return;
++    if (n.parentNode) n.parentNode.removeChild(n);
++  }
++  function onResult(raw) {
++    raw = String(raw || '');
++    var r = null;
++    try { r = JSON.parse(raw); } catch (e) {}
++    var msg = r ? String(r.message || '') : raw;
++    var 限速 = /太快|稍后再|发送间隔|间隔/i.test(msg);
++    /* 容错：插件可能回 {ok:true}、可能回 {message:"发送成功"}，也可能直接回整页 HTML。
++       只要不是“太快”，一律按发送成功处理，这样才敢去刷新列表。 */
++    var 成功 = 限速 ? false : (r ? (r.ok !== false) : true);
++
++    if (成功) {
++      S.last = Date.now();
++      report('__MLITE_PM_OK');
++      if (autoId) { report('__MLITE_PM_D|' + autoId); autoId = 0; }
++      render();
++      var sent = sendingText || lastText;
++      sendingText = '';
++      setTimeout(restoreDraftAfterSend, 260);
++      afterSendRefresh(sent);
++      return;
++    }
++    if (!限速) {
++      report('__MLITE_PM_F|' + JSON.stringify({ m: msg.slice(0, 120) }));
++      return;
++    }
++    hideNotice();
++    setTimeout(hideNotice, 80);
++    if (autoId) {
++      report('__MLITE_PM_L|' + JSON.stringify({ id: autoId }));
++      autoId = 0;
++      sendingText = '';
++      setTimeout(restoreDraftAfterSend, 260);
++      return;
++    }
++    var el = box();
++    var tv = (el && String(el.value || '')) || lastText;
++    if (tv && tv.replace(/\s+/g, '')) {
++      report('__MLITE_PM_L|' + JSON.stringify({ t: tv, u: location.href }));
++    } else {
++      report('__MLITE_PM_L|' + JSON.stringify({}));
++    }
++  }
++  function isPmUrl(u) { return /ac=pm/.test(String(u || '')) && /op=send/.test(String(u || '')); }
++
++  var XO = XMLHttpRequest.prototype.open, XS = XMLHttpRequest.prototype.send;
++  XMLHttpRequest.prototype.open = function (m, u) {
++    try { this.__mliteU = String(u || ''); } catch (e) {}
++    return XO.apply(this, arguments);
++  };
++  XMLHttpRequest.prototype.send = function () {
++    var x = this, u = '';
++    try { u = String(x.__mliteU || ''); } catch (e) {}
++    if (isPmUrl(u)) {
++      x.addEventListener('load', function () {
++        var raw = '';
++        try { raw = String(x.responseText || ''); } catch (e) { return; }
++        onResult(raw);
++      });
++    }
++    return XS.apply(this, arguments);
++  };
++  if (window.fetch) {
++    var OF = window.fetch;
++    window.fetch = function (u) {
++      var url = String(typeof u === 'string' ? u : (u && u.url) || '');
++      var p = OF.apply(this, arguments);
++      if (isPmUrl(url)) {
++        try {
++          p.then(function (r) {
++            try { r.clone().text().then(onResult); } catch (e) {}
++          });
++        } catch (e) {}
++      }
++      return p;
++    };
++  }
++
++  /* ---------- 3. 到点自动发送 ---------- */
++  function sendItem(it) {
++    var el = box(), b = btn();
++    if (!el || !b) return false;
++    /* 记下用户已经打在框里的内容，发完放回去（别把草稿冲掉） */
++    var draft = String(el.value || '');
++    pendingDraft = (draft.replace(/\s+/g, '') && draft !== it.t) ? draft : '';
++    pendingSent = it.t;
++    sendingText = it.t;
++    setVal(el, it.t);
++    autoId = it.id;
++    report('__MLITE_PM_T|' + it.id);
++    try {
++      b.click();
++    } catch (e) {
++      autoId = 0;
++      sendingText = '';
++      report('__MLITE_PM_N|' + it.id);
++      setTimeout(restoreDraftAfterSend, 120);
++      return false;
++    }
++    setTimeout(function () {
++      if (autoId === it.id) {
++        autoId = 0;
++        sendingText = '';
++        report('__MLITE_PM_X|' + it.id);
++        setTimeout(restoreDraftAfterSend, 260);
++      }
++    }, 20000);
++    return true;
++  }
++  function tick() {
++    var now = Date.now(), i, it;
++    if (!D.hidden) {
++      for (i = 0; i < S.q.length; i++) {
++        it = S.q[i];
++        if (!it || !it.t || it.fail || it.sent) continue;
++        if (conv(it.u) && conv(it.u) !== MY) continue;   /* 不是当前会话，跳过 */
++        if (!it.d || it.d > now) continue;
++        if (!box() || !btn()) break;                     /* 不在会话页，等下次 */
++        if (sendItem(it)) { it.sent = now; break; }
++      }
++    }
++    render();
++  }
++  setInterval(tick, 600);
++  setTimeout(tick, 800);
++  setTimeout(tick, 2000);
++
++  window.__mlitePmSet = function (cfg) {
++    if (!cfg) return;
++    if (typeof cfg.win === 'number' && cfg.win > 0) S.win = cfg.win;
++    if (typeof cfg.last === 'number') S.last = cfg.last;
++    if (cfg.q) S.q = cfg.q;
++    render();
++  };
++  window.__mlitePm = {
++    state: function () {
++      return { win: S.win, last: S.last, left: leftSec(), my: MY, q: S.q };
++    },
++    tick: tick,
++    render: render
++  };
++
++  /* 整页重载回来后：恢复草稿 + 滚到最新一条 */
++  try {
++    if (sessionStorage.getItem('mlite_pm_after') === MY) {
++      sessionStorage.removeItem('mlite_pm_after');
++      setTimeout(function () { restoreDraft(); scrollPmBottom(); }, 600);
++      setTimeout(scrollPmBottom, 1500);
++    } else {
++      restoreDraft();
++    }
++  } catch (e) {}
++})();
++]==]
++
++function 注入私信增强()
++  if not 私信自动重发开关() then
++    return false
++  end
++  local 状态 = 私信状态()
++  local now = 毫秒()
++  -- 超过 1 小时的排队消息不再自动发（隔了很久突然发出去更奇怪）
++  local 保留 = {}
++  for _, it in ipairs(状态.q) do
++    if (tonumber(it.d) or 0) > now - 3600000 then table.insert(保留, it) end
++  end
++  if #保留 ~= #状态.q then
++    状态.q = 保留
++    重排队列(状态)
++    私信保存(状态)
++  end
++  local ok = pcall(function()
++    加载Js("window.__mlitePmCfg=" .. 队列json(状态) .. ";window.__mlitePmCfg.auto=1;")
++    加载Js(私信脚本)
++    私信推送()
++  end)
++  if not ok then print("私信增强注入失败") end
++  私信开始轮询()
++  return ok
++end

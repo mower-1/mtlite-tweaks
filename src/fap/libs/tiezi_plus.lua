@@ -1,0 +1,1261 @@
+-- 帖子页增强模块 v2
+-- ① 回复可见自动回复（精确识别 + 省电监听）
+-- ② 评论屏蔽（整层消失，不屏蔽楼主帖）
+-- ③ 自动上下页（预加载 + 并行抓取 + 顺序拼接 + 去重 + 自愈）
+-- 依赖：gongyong.lua（主题色、AlertDialog、print/print2 等全局）
+
+local cjson = require("cjson")
+
+-- ============================ 屏蔽词处理 ============================
+
+function 屏蔽词列表()
+  local 结果 = {}
+  local 文本 = 获取应用数据("评论屏蔽词")
+  if not 文本 or 文本 == "" then
+    return 结果
+  end
+  for 行 in 文本:gmatch("[^\r\n]+") do
+    行 = 行:gsub("　", "")          -- 全角空格按整串去掉，避免多字节被截断
+    行 = 行:gsub("^%s+", ""):gsub("%s+$", "")
+    if 行 == "" then
+      -- 空行跳过
+     elseif 行:find("[|%(%)%[%]{}%^%$%.%*%+%?\\]") then
+      -- 含正则符号：整行当成一条正则，不能再按逗号切开（会破坏 {2,3} 之类）
+      table.insert(结果, 行)
+     else
+      for 词 in 行:gmatch("[^，,；;、]+") do
+        词 = 词:gsub("^%s+", ""):gsub("%s+$", "")
+        if 词 ~= "" then
+          table.insert(结果, 词)
+        end
+      end
+    end
+  end
+  return 结果
+end
+
+-- 内置词表定义在 gongyong.lua（首次运行会作为一条正则写进屏蔽词设置），这里只做统计
+function 内置屏蔽词()
+  if type(内置屏蔽词列表) == "function" then
+    return 内置屏蔽词列表()
+  end
+  return {}
+end
+
+function 屏蔽词数量文本()
+  local 数量 = #屏蔽词列表()
+  if 数量 == 0 then
+    return "未设置"
+  end
+  return 数量 .. " 个屏蔽词"
+end
+
+function 屏蔽词拼接文本()
+  return 获取应用数据("评论屏蔽词") or ""
+end
+
+function 初始化并行页数()
+  local v = tonumber(获取应用数据("并行加载页数") or "")
+  if not v or v < 1 or v > 4 then
+    存储应用数据("并行加载页数", "2")
+    v = 2
+  end
+  return v
+end
+
+function 并行页数文本()
+  return "当前：" .. tostring(初始化并行页数()) .. " 页"
+end
+
+-- 设置页保存后刷新列表显示（listView 由简易设置功能布局创建）
+function 刷新设置列表()
+  if listView and listView.getAdapter() then
+    listView.getAdapter().notifyDataSetChanged()
+  end
+end
+
+-- ============================ 注入到网页的脚本 ============================
+
+local 增强脚本 = [==[
+(function () {
+  var CFG = window.__mliteCfg || {};
+  if (window.__mlitePlus && window.__mlitePlus.reload) {
+    window.__mlitePlus.reload(CFG);
+    return;
+  }
+
+  var D = document;
+  var W = [];
+
+  /* ---------------- 基础工具 ---------------- */
+  function txt(el) {
+    if (!el) return '';
+    return ((el.innerText || el.textContent) || '').replace(/\s+/g, ' ').trim();
+  }
+  function byId(id) { return D.getElementById(id); }
+  function postRoot() { return D.querySelector('.comiis_postlist'); }
+  function isFloor(el) {
+    return !!(el && el.classList && el.classList.contains('comiis_postli') && /^pid\d+$/.test(el.id || ''));
+  }
+  function floors() {
+    var root = postRoot(), out = [], i;
+    if (!root) return out;
+    for (i = 0; i < root.children.length; i++) {
+      if (isFloor(root.children[i])) out.push(root.children[i]);
+    }
+    return out;
+  }
+  function bodyOf(f) {
+    return f.querySelector('.comiis_message_table') ||
+           f.querySelector('.comiis_message') ||
+           f.querySelector('.message') ||
+           f.querySelector('.t_f') ||
+           f.querySelector('[id^="postmessage_"]') || f;
+  }
+  /* 纯正文：把引用块（回复别人时带上的原话）去掉，避免它撑长文本、也避免误判 */
+  function bodyText(f, keepQuote) {
+    var el = bodyOf(f), t = txt(el), i, qs;
+    if (!keepQuote && el.querySelectorAll) {
+      qs = el.querySelectorAll('.comiis_quote');
+      for (i = 0; i < qs.length; i++) {
+        var qt = txt(qs[i]);
+        if (qt) t = t.replace(qt, '');
+      }
+    }
+    return t.replace(/\s+/g, ' ').trim();
+  }
+  /* 这条是不是“回复别人”：带引用块，且不是“回复可见”提示 */
+  function isReplyToOther(f) {
+    var qs = f.querySelectorAll('.comiis_quote'), i, qt;
+    for (i = 0; i < qs.length; i++) {
+      qt = txt(qs[i]);
+      if (!qt) continue;
+      if (/查看本帖隐藏|回复可见|回复后可见|隐藏内容/.test(qt)) continue;   /* 这是提示，不算回复 */
+      return true;
+    }
+    return false;
+  }
+  /* 楼主帖：comiis 模板独有 comiis_postli_topv1 / comiis_pltit 标记 */
+  function isOP(f) {
+    return !!(f.querySelector('.comiis_postli_topv1') || f.querySelector('.comiis_pltit'));
+  }
+  function pidOf(el) {
+    var m = (el.id || '').match(/^pid(\d+)$/);
+    if (m) return m[1];
+    var a = el.querySelector('a[name^="pid"]');
+    if (a) {
+      m = (a.getAttribute('name') || '').match(/pid(\d+)/);
+      if (m) return m[1];
+    }
+    return '';
+  }
+  function buildWords() {
+    W = [];
+    var a = CFG.words || [], i, w, re;
+    for (i = 0; i < a.length; i++) {
+      w = String(a[i]).replace(/^\s+|\s+$/g, '');
+      if (!w) continue;
+      re = null;
+      try { re = new RegExp(w, 'i'); } catch (e) { re = null; }  /* 非法正则退化为包含匹配 */
+      W.push({ raw: w, re: re });
+    }
+  }
+  buildWords();
+
+  /* ---------------- 评论屏蔽 ---------------- */
+  function ensureStyle() {
+    if (byId('mlite-style')) return;
+    var s = D.createElement('style');
+    s.id = 'mlite-style';
+    s.textContent = '.comiis_postli[data-mlite-blocked]{display:none !important;}';
+    (D.head || D.documentElement).appendChild(s);
+  }
+  function hideFloor(f, word) {
+    f.setAttribute('data-mlite-blocked', word);
+    f.style.display = 'none';
+  }
+  function showFloor(f) {
+    f.removeAttribute('data-mlite-blocked');
+    f.style.display = '';
+  }
+  /* 单条评论是否屏蔽：
+     1) 超过 10 个字一律不屏蔽（水贴都是短句，正常回复不受影响）
+     2) 整条只有字母/数字/符号（无中文）且不含“.”的，一律屏蔽（含 . 可能是链接）
+     3) 命中屏蔽词则屏蔽，屏蔽词按正则匹配（包含语义） */
+  function blockReason(text) {
+    var t = String(text || '').replace(/\s+/g, '');
+    if (!t) return '';
+    if (t.length > 10) return '';
+    if (/^[\x20-\x7E]+$/.test(t) && t.indexOf('.') === -1) return '纯字母数字符号';
+    for (var j = 0; j < W.length; j++) {
+      if (W[j].re) {
+        try { if (W[j].re.test(t)) return W[j].raw; } catch (e) {}
+      } else if (t.indexOf(W[j].raw) !== -1) {
+        return W[j].raw;
+      }
+    }
+    return '';
+  }
+  function applyBlock() {
+    var list = floors(), active = !!CFG.block;
+    var changed = 0, i, j, f, t;
+    if (active) ensureStyle();
+    for (i = 0; i < list.length; i++) {
+      f = list[i];
+      if (!active) {
+        if (f.getAttribute('data-mlite-blocked')) showFloor(f);
+        f.removeAttribute('data-mlite-scanned');
+        continue;
+      }
+      if (f.getAttribute('data-mlite-scanned')) continue;
+      f.setAttribute('data-mlite-scanned', '1');
+      if (isOP(f)) continue;                      /* 楼主帖不参与屏蔽 */
+      if (isReplyToOther(f)) continue;            /* 回复别人的楼层不屏蔽（引用内容容易误伤） */
+      t = bodyText(f);
+      if (!t) continue;
+      var why = blockReason(t);
+      if (why) {
+        hideFloor(f, why.length > 20 ? why.substr(0, 20) + '…' : why);
+        changed++;
+      }
+    }
+    if (changed && window.__mlitePager && window.__mlitePager.checkFill) {
+      window.__mlitePager.checkFill();            /* 楼层消失后页面变矮，补加载 */
+    }
+    return changed;
+  }
+  var scanTimer = null;
+  function scheduleScan() {
+    if (scanTimer) return;
+    scanTimer = setTimeout(function () { scanTimer = null; applyBlock(); }, 150);
+  }
+  function startBlockObserver() {
+    if (!D.body) return;
+    new MutationObserver(function (ms) {
+      for (var i = 0; i < ms.length; i++) {
+        if (ms[i].addedNodes && ms[i].addedNodes.length) { scheduleScan(); return; }
+      }
+    }).observe(D.body, { childList: true, subtree: true });
+  }
+
+  /* ---------------- 回复可见识别 ----------------
+     真实结构（comiis 模板）：
+     <div class="comiis_quote bg_h f_c">昵称，如果您要查看本帖隐藏内容请<a href="...action=reply...">回复</a></div>
+     判定必须同时满足：短块 + 含“隐藏” + 含回复链接（或 showhide 类），避免把普通回复误判 */
+  function hasReplyLink(el) {
+    var a = el.querySelectorAll('a[href]'), i;
+    for (i = 0; i < a.length; i++) {
+      if (/action=reply/i.test(a[i].getAttribute('href') || '')) return true;
+    }
+    return false;
+  }
+  function findNotice() {
+    var els = D.querySelectorAll('.comiis_quote, .showhide, [class*="showhide"], .comiis_hidebox');
+    var i, el, t;
+    for (i = 0; i < els.length; i++) {
+      el = els[i];
+      if (el.closest && el.closest('[data-mlite-blocked]')) continue;
+      t = txt(el);
+      if (!t || t.length > 220) continue;
+      if (!/隐藏|回复可见|回复后可见|回复才能/.test(t)) continue;
+      if (/showhide/i.test(el.className || '') || hasReplyLink(el)) return el;
+    }
+    /* 兜底：仅限楼主帖正文，且正文里存在回复链接 */
+    var fs = floors(), k, m, b, kids, kt;
+    for (k = 0; k < fs.length; k++) {
+      if (!isOP(fs[k])) continue;
+      b = bodyOf(fs[k]);
+      if (!hasReplyLink(b)) continue;
+      kids = b.querySelectorAll('div,p,span');
+      for (m = 0; m < kids.length && m < 200; m++) {
+        kt = txt(kids[m]);
+        if (kt && kt.length <= 120 && /查看本帖隐藏|隐藏内容.{0,6}回复|回复.{0,6}(可见|查看|浏览)/.test(kt)) return kids[m];
+      }
+    }
+    return null;
+  }
+
+  var replyObs = null, replyTimer = null, replyPolls = 0, replyFound = false, replyTick = null;
+  function stopReplyWatch() {
+    if (replyObs) { try { replyObs.disconnect(); } catch (e) {} replyObs = null; }
+    if (replyTimer) { clearInterval(replyTimer); replyTimer = null; }
+    if (replyTick) { clearTimeout(replyTick); replyTick = null; }
+  }
+  function checkReply() {
+    if (replyFound || !CFG.reply) return true;
+    var n = null;
+    try { n = findNotice(); } catch (e) { n = null; }
+    if (!n) return false;
+    replyFound = true;
+    stopReplyWatch();
+    setTimeout(function () {
+      try { alert('__MLITE_REPLYVISIBLE__'); } catch (e) {}
+    }, 50);
+    return true;
+  }
+  function scheduleReplyCheck() {
+    if (replyTick || replyFound) return;
+    replyTick = setTimeout(function () { replyTick = null; checkReply(); }, 120);
+  }
+  function startReplyWatch() {
+    if (!CFG.reply) return;
+    if (checkReply()) return;
+    try {
+      replyObs = new MutationObserver(function (ms) {
+        for (var i = 0; i < ms.length; i++) {
+          if (ms[i].addedNodes && ms[i].addedNodes.length) { scheduleReplyCheck(); return; }
+        }
+      });
+      replyObs.observe(D.body, { childList: true, subtree: true });
+    } catch (e) { replyObs = null; }
+    /* 500ms 兜底轮询，最多 20 次（10 秒）；页面不可见时不消耗次数 */
+    replyTimer = setInterval(function () {
+      if (replyFound) { stopReplyWatch(); return; }
+      if (D.hidden) return;
+      replyPolls++;
+      checkReply();
+      if (replyFound || replyPolls >= 20) stopReplyWatch();
+    }, 500);
+  }
+
+  /* ---------------- 自动回复 ---------------- */
+  function doReply(msg) {
+    try {
+      var ta = byId('needmessage') || D.querySelector('textarea[name="message"]');
+      if (!ta) { alert('__MLITE_REPLY_NOFORM__'); return false; }
+      ta.value = msg;
+      try {
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        ta.dispatchEvent(new Event('change', { bubbles: true }));
+      } catch (e) {}
+      var form = ta.form || byId('fastpostform');
+      if (!form) { alert('__MLITE_REPLY_NOFORM__'); return false; }
+      var done = false;
+      try {
+        if (typeof window.fastpostvalidate === 'function') { window.fastpostvalidate(form); done = true; }
+      } catch (e) {}
+      if (!done) {
+        try { var btn = byId('fastpostsubmit'); if (btn) { btn.click(); done = true; } } catch (e) {}
+      }
+      if (!done) {
+        try { HTMLFormElement.prototype.submit.call(form); done = true; } catch (e) {}
+      }
+      if (!done) { alert('__MLITE_REPLY_FAILED__'); return false; }
+      alert('__MLITE_REPLY_SUBMITTED__');
+      setTimeout(function () { try { location.reload(); } catch (e) {} }, 3500);
+      return true;
+    } catch (e) {
+      alert('__MLITE_REPLY_FAILED__');
+      return false;
+    }
+  }
+
+  /* ---------------- 自动上下页：预加载 + 并行 + 顺序拼接 ---------------- */
+  var Pager = (function () {
+    var enabled = !!CFG.pager;
+    var parallel = Math.max(1, Math.min(4, parseInt(CFG.parallel, 10) || 2));
+    var preload = Math.max(1, Math.min(4, parseInt(CFG.preload, 10) || 2));
+
+    var curPage = 1, nextReq = 0, nextFlush = 0;
+    var ready = {}, pending = {}, inflight = 0;
+    var seen = {}, done = false, started = false, prevLoading = false;
+    var emptyStreak = 0, nextUrl = '', linkFor = {}, failCount = {}, doneWhy = '';
+    var revives = 0, lastFailAt = 0;
+    var sentinel = null, io = null, poll = null, tipEl = null;
+    var fillTimer = null, raf = null, lastFill = 0;
+
+    function vh() {
+      return window.innerHeight || (D.documentElement && D.documentElement.clientHeight) || 600;
+    }
+    function scrollTop() {
+      var el = D.scrollingElement || D.documentElement || D.body;
+      return el ? (el.scrollTop || 0) : (window.pageYOffset || 0);
+    }
+    function absUrl(h) {
+      try { return new URL(h, location.href).href; } catch (e) {}
+      try {
+        var a = D.createElement('a');
+        a.href = h;
+        return a.href;
+      } catch (e2) {}
+      return h;
+    }
+    function pageFromUrl(u) {
+      var m = (u || '').match(/thread-\d+-(\d+)-\d+\.html/);
+      if (m) return parseInt(m[1], 10);
+      m = (u || '').match(/[?&]page=(\d+)/);
+      if (m) return parseInt(m[1], 10);
+      m = (u || '').match(/\/(\d+)\.html/);
+      if (m) return parseInt(m[1], 10);
+      return 1;
+    }
+    function pageUrl(p) {
+      var href = location.href.split('#')[0], m;
+      m = href.match(/^(.*thread-\d+-)(\d+)(-\d+\.html.*)$/);
+      if (m) return m[1] + p + m[3];
+      m = href.match(/^(.*[?&]page=)(\d+)(.*)$/);
+      if (m) return m[1] + p + m[3];
+      return '';
+    }
+    function urlOf(p) {
+      if (linkFor[p]) return linkFor[p];
+      var u = pageUrl(p);
+      if (u) return u;
+      if (p === nextFlush && nextUrl) return nextUrl;
+      return '';
+    }
+    function withPage(u, n) {
+      var s = absUrl(u), m;
+      m = s.match(/^(.*thread-\d+-)(\d+)(-\d+\.html.*)$/);
+      if (m) return m[1] + n + m[3];
+      m = s.match(/^(.*[?&]page=)(\d+)(.*)$/);
+      if (m) return m[1] + n + m[3];
+      return s;
+    }
+    /* 从页面 DOM 里取“下一页”链接（比猜页码可靠，也兼容没有 page= 的地址） */
+    function nextLinkOf(doc) {
+      var sel = ['a.bg_f.b_ok', '.comiis_page a[href]', '.comiis_multi_box a[href]', 'a[href]'];
+      var i, j, links, a, h, t;
+      for (j = 0; j < sel.length; j++) {
+        links = doc.querySelectorAll(sel[j]);
+        for (i = links.length - 1; i >= 0; i--) {
+          a = links[i];
+          h = a.getAttribute('href') || '';
+          if (!h || /^javascript/i.test(h) || h.charAt(0) === '#') continue;
+          t = (a.textContent || '').replace(/\s+/g, '');
+          if (t.length > 8) continue;                 /* 正文里带“下一页”的长链接不算 */
+          if (/下一页|下页/.test(t) && !/上一页|上页/.test(t)) return absUrl(h);
+        }
+      }
+      return '';
+    }
+    /* 页码显示：模板是 <a id="select_a"><select id="dumppage">…</select>第 1 页</a>，
+       只改 select.value 不会动那行文本，必须一起改，否则底部页码不动 */
+    function syncDump(p) {
+      var s = byId('dumppage'), i, o;
+      if (s) {
+        try { s.value = String(p); } catch (e) {}
+        o = s.options || [];
+        for (i = 0; i < o.length; i++) {
+          try { o[i].selected = (String(o[i].value) === String(p)); } catch (e2) {}
+        }
+      }
+      var a = byId('select_a');
+      if (a && a.childNodes) {
+        var kids = a.childNodes, k, nv, hit = false;
+        for (k = 0; k < kids.length; k++) {
+          if (kids[k].nodeType !== 3) continue;
+          nv = kids[k].nodeValue || '';
+          if (/第\s*\d+\s*页/.test(nv)) {
+            kids[k].nodeValue = nv.replace(/第\s*\d+\s*页/, '第 ' + p + ' 页');
+            hit = true;
+          }
+        }
+        if (!hit && a.lastChild && a.lastChild.nodeType === 3) a.lastChild.nodeValue = '第 ' + p + ' 页';
+      }
+      var links = D.querySelectorAll('.comiis_page a[href]'), m, t, h;
+      for (i = 0; i < links.length; i++) {
+        t = (links[i].textContent || '').replace(/\s+/g, '');
+        h = links[i].getAttribute('href') || '';
+        if (!h || /^javascript/i.test(h)) continue;
+        if (/下一页/.test(t) && !/上一页/.test(t)) {
+          try { links[i].setAttribute('href', withPage(h, p + 1)); } catch (e3) {}
+        } else if (/上一页/.test(t) && !/下一页/.test(t)) {
+          try { links[i].setAttribute('href', withPage(h, Math.max(1, p - 1))); } catch (e4) {}
+        }
+      }
+    }
+    function rememberFloors() {
+      var fs = floors(), i, p;
+      for (i = 0; i < fs.length; i++) { p = pidOf(fs[i]); if (p) seen[p] = 1; }
+    }
+    /* 分页区：能明确判断“没有下一页”时 hasNext=false（末页），
+       没有分页区则 ok=false（交给 nextLinkOf 兜底） */
+    function pagerOf(doc) {
+      var bar = doc.querySelector('.comiis_page') || doc.querySelector('.comiis_multi_box');
+      if (!bar) return { ok: false, hasNext: false, url: '' };
+      var as = bar.querySelectorAll('a'), i, t, h, nx = null, sel, maxP = 0, cur = 0, v;
+      for (i = 0; i < as.length; i++) {
+        t = (as[i].textContent || '').replace(/\s+/g, '');
+        if (/下一页/.test(t) && !/上一页/.test(t)) { nx = as[i]; break; }
+      }
+      if (nx) {
+        h = nx.getAttribute('href') || '';
+        if (h && !/^javascript/i.test(h)) return { ok: true, hasNext: true, url: absUrl(h) };
+        return { ok: true, hasNext: false, url: '' };   /* 有“下一页”但无 href = 末页 */
+      }
+      /* 没有“下一页”文字时（可能是图标按钮），用页码下拉判断总页数/当前页 */
+      sel = bar.querySelector('select') || doc.querySelector('#dumppage');
+      if (sel && sel.options) {
+        for (i = 0; i < sel.options.length; i++) {
+          v = parseInt(sel.options[i].value, 10) || 0;
+          if (v > maxP) maxP = v;
+          if (sel.options[i].selected && v > cur) cur = v;
+        }
+      }
+      if (maxP && cur) {
+        if (maxP > cur) return { ok: true, hasNext: true, url: withPage(location.href, cur + 1) };
+        return { ok: true, hasNext: false, url: '' };
+      }
+      return { ok: false, hasNext: false, url: '' };      /* 判断不了，交给 nextLinkOf */
+    }
+    function parseFrom(doc) {
+      var root = doc.querySelector('.comiis_postlist');
+      if (!root) return null;
+      var out = [], i, el;
+      for (i = 0; i < root.children.length; i++) {
+        el = root.children[i];
+        if (!el.classList || !el.classList.contains('comiis_postli')) continue;
+        if (!/^pid\d+$/.test(el.id || '')) continue;   /* 跳过 post_new 回复框等 */
+        out.push(el.outerHTML);
+      }
+      var pg = pagerOf(doc), nx, has;
+      if (pg.ok) {
+        has = pg.hasNext;
+        nx = pg.hasNext ? pg.url : '';
+      } else {
+        nx = nextLinkOf(doc);
+        has = !!nx;            /* 没有分页区又没有“下一页”链接 = 单页帖/末页 */
+      }
+      return { floors: out, nextUrl: nx, hasNext: has, sawPager: pg.ok };
+    }
+    function timeout(p, ms) {
+      return new Promise(function (res, rej) {
+        var t = setTimeout(function () { rej(new Error('timeout')); }, ms);
+        p.then(function (v) { clearTimeout(t); res(v); },
+               function (e) { clearTimeout(t); rej(e); });
+      });
+    }
+    function fetchPage(p) {
+      var url = urlOf(p);
+      if (!url) return Promise.reject(new Error('no-url'));
+      var opt = {
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: { 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' }
+      };
+      try { opt.referrer = location.href; opt.referrerPolicy = 'same-origin'; } catch (e0) {}
+      return timeout(fetch(url, opt), 8000)
+        .then(function (r) {
+          if (!r.ok) throw new Error('http-' + r.status);
+          return r.text();
+        })
+        .then(function (html) {
+          if (!html || html.indexOf('comiis_postlist') === -1) throw new Error('blocked');
+          var res = parseFrom(new DOMParser().parseFromString(html, 'text/html'));
+          if (!res) throw new Error('empty');
+          return res;
+        });
+    }
+    /* 隐藏 iframe：与浏览器正常导航完全一致，能过 WAF 挑战页（挑战页会自己 reload，
+       所以允许最多 3 次 onload，只有解析到 .comiis_postlist 才算成功） */
+    function fetchFrame(p) {
+      return new Promise(function (resolve, reject) {
+        var url = urlOf(p);
+        if (!url) { reject(new Error('no-url')); return; }
+        var f = D.createElement('iframe');
+        var finished = false, tries = 0;
+        var timer = setTimeout(fail, 12000);
+        function kill() {
+          clearTimeout(timer);
+          try { if (f.parentNode) f.parentNode.removeChild(f); } catch (e) {}
+        }
+        function fail() {
+          if (finished) return;
+          finished = true;
+          kill();
+          reject(new Error('frame-fail'));
+        }
+        f.style.cssText = 'position:fixed;left:-99999px;top:-99999px;width:1px;height:1px;border:0;opacity:0;pointer-events:none';
+        f.onload = function () {
+          if (finished) return;
+          tries++;
+          var res = null;
+          try {
+            var w = f.contentWindow, doc = w && w.document;
+            if (doc && doc.querySelector('.comiis_postlist')) res = parseFrom(doc);
+          } catch (e) { res = null; }
+          if (res) { finished = true; kill(); resolve(res); return; }
+          if (tries >= 3) fail();
+        };
+        f.src = url;
+        (D.body || D.documentElement).appendChild(f);
+      });
+    }
+    function pickUp(htmls, before) {
+      var root = postRoot();
+      if (!root || !htmls || !htmls.length) return 0;
+      var tmp = D.createElement('div');
+      tmp.innerHTML = htmls.join('');
+      var frag = D.createDocumentFragment();
+      var added = 0, el, pid, tail;
+      while (tmp.firstChild) {
+        el = tmp.firstChild;
+        tmp.removeChild(el);
+        if (!el.classList || !el.classList.contains('comiis_postli')) continue;
+        pid = pidOf(el);
+        if (pid && seen[pid]) continue;          /* 楼层 pid 去重 */
+        if (pid) seen[pid] = 1;
+        frag.appendChild(el);
+        added++;
+      }
+      if (!added) return 0;
+      if (before) root.insertBefore(frag, root.firstChild);
+      else {
+        tail = byId('post_new');               /* 回复编辑器始终留在最后 */
+        if (tail && tail.parentNode === root) root.insertBefore(frag, tail);
+        else root.appendChild(frag);
+      }
+      try { applyBlock(); } catch (e) {}
+      try { if (window.popup && window.popup.init) window.popup.init(); } catch (e) {}
+      return added;
+    }
+    function tip(text, clickable) {
+      if (!sentinel || !sentinel.parentNode) return;
+      if (!tipEl || !tipEl.parentNode) {
+        tipEl = D.createElement('div');
+        tipEl.id = 'mlite-tail-tip';
+        tipEl.style.cssText = 'padding:10px 0;text-align:center;font-size:12px;';
+        sentinel.parentNode.insertBefore(tipEl, sentinel);
+      }
+      tipEl.style.color = clickable ? '#3a7afe' : '#888';
+      tipEl.textContent = text;
+      tipEl.onclick = clickable ? function () {
+        done = false; doneWhy = ''; emptyStreak = 0;
+        hideTip();
+        pumpSoon(20);
+      } : null;
+    }
+    function showTip(n) { tip('正在加载第 ' + n + ' 页…', false); }
+    function hideTip() {
+      if (tipEl && tipEl.parentNode) { try { tipEl.parentNode.removeChild(tipEl); } catch (e) {} }
+      tipEl = null;
+    }
+    function flush() {
+      if (done) { ready = {}; return; }        /* 到底后丢弃迟到的并行页 */
+      var guard = 0, r, added;
+      while (ready[nextFlush] && guard++ < 60) {
+        r = ready[nextFlush];
+        delete ready[nextFlush];
+        added = 0;
+        if (r.floors && r.floors.length) added = pickUp(r.floors, false);
+        if (r.nextUrl) { nextUrl = r.nextUrl; linkFor[nextFlush + 1] = r.nextUrl; }
+        if (added) emptyStreak = 0; else emptyStreak++;
+        syncDump(nextFlush);
+        nextFlush++;
+        if (nextReq < nextFlush) nextReq = nextFlush;   /* 失败放行的页不再回头重拉 */
+
+        if (r.hasNext === false) {                    /* 末页 */
+          done = true;
+          doneWhy = 'last';
+          ready = {};
+          tip('当前已是最后一页', false);
+          setTimeout(function () { if (done) hideTip(); }, 2600);
+          break;
+        }
+        if (emptyStreak >= 2) {                       /* 连续两页抓不到东西 */
+          done = true;
+          doneWhy = 'empty';
+          lastFailAt = Date.now();
+          ready = {};
+          break;
+        }
+      }
+      if (done) {
+        if (doneWhy === 'empty') {
+          if (urlOf(nextFlush)) tip('后续楼层加载失败，点此重试', true);
+          else hideTip();
+        }
+      } else if (!inflight) {
+        hideTip();
+      }
+      checkFill();
+    }
+    function pump() {
+      if (!enabled || done) return;
+      var guard = 0, p;
+      while (inflight < parallel && guard++ < 30) {
+        p = nextReq < 1 ? 1 : nextReq;
+        if (ready[p] || pending[p]) { nextReq = p + 1; continue; }
+        if (!urlOf(p)) break;               /* 链接还没解析出来，等下一轮，不能当成到底 */
+        nextReq = p + 1;
+        request(p);
+      }
+    }
+    function request(p) {
+      if (done || pending[p] || ready[p]) return;
+      pending[p] = true;
+      inflight++;
+      var settled = false;
+      function finish() { if (!pending[p]) return; delete pending[p]; inflight--; }
+      function ok(res) {
+        if (settled) return;
+        settled = true;
+        finish();
+        delete failCount[p];
+        if (done) return;                   /* 已经到底，迟到的页直接丢 */
+        ready[p] = res || { floors: [], nextUrl: '' };
+        flush();
+      }
+      function frame() { fetchFrame(p).then(ok, function () { if (!settled) bad(); }); }
+      function bad() {
+        if (settled) return;
+        if (done) { settled = true; finish(); return; }
+        failCount[p] = (failCount[p] || 0) + 1;
+        if (failCount[p] <= 1) {               /* 同一页最多再试一轮（多半是被风控拦了） */
+          showTip(p);
+          setTimeout(function () { if (!settled) frame(); }, 600 * failCount[p]);
+          return;
+        }
+        settled = true;
+        finish();
+        ready[p] = { floors: [], nextUrl: '', failed: true };
+        flush();
+      }
+      showTip(p);
+      if (typeof window.fetch !== 'function') { frame(); return; }
+      fetchPage(p).then(function (res) {
+        if (res && res.floors && res.floors.length) { ok(res); return; }
+        frame();                               /* fetch 拿到的是挑战页/空页，交给 iframe */
+      }, frame);
+    }
+    function pumpSoon(d) {
+      if (fillTimer) return;
+      fillTimer = setTimeout(function () { fillTimer = null; pump(); flush(); }, d || 40);
+    }
+    /* 不依赖 documentElement.scrollTop：直接看最后一个可见楼层离视口底部还有多远 */
+    function nearBottom() {
+      var fs = floors(), i, last = null, r, h = vh();
+      for (i = fs.length - 1; i >= 0; i--) {
+        if (fs[i].getBoundingClientRect().height > 0) { last = fs[i]; break; }
+      }
+      var de = D.documentElement;
+      if (!last) {                        /* 楼层全部被屏蔽时退回整体高度判断 */
+        if (!de || !de.scrollHeight) return false;
+        return de.scrollHeight - scrollTop() - h < h * preload;
+      }
+      r = last.getBoundingClientRect();
+      if (r.bottom - h < h * preload) return true;
+      if (de && de.scrollHeight > h && de.scrollHeight - scrollTop() - h < h * preload) return true;
+      return false;
+    }
+    function checkFill() {
+      if (!enabled || D.hidden) return;
+      if (done) {
+        /* 被风控打断时，用户继续往下滑就再给两次机会（间隔 3s，避免死循环） */
+        if (doneWhy === 'empty' && revives < 2 && Date.now() - lastFailAt > 3000 &&
+            urlOf(nextFlush) && nearBottom()) {
+          revives++;
+          done = false;
+          doneWhy = '';
+          emptyStreak = 0;
+          pumpSoon(20);
+        }
+        return;
+      }
+      var now = Date.now();
+      if (now - lastFill < 400) return;         /* 节流，避免自触发空转 */
+      if (!nearBottom()) return;
+      lastFill = now;
+      pumpSoon(20);
+    }
+    function maybePrev() {
+      if (!enabled || prevLoading) return;
+      var p = curPage - 1;
+      if (p < 1) return;
+      var root = postRoot();
+      if (root && root.getBoundingClientRect().top < -60) return;   /* 还没到顶 */
+      prevLoading = true;
+      var before = scrollTop();
+      linkFor[p] = pageUrl(p) || '';
+      fetchPage(p).then(function (res) {
+        if (res && res.floors && res.floors.length && pickUp(res.floors, true)) {
+          curPage = p;
+          syncDump(p);
+          try { window.scrollTo(0, before + 260); } catch (e) {}
+        }
+        prevLoading = false;
+      }, function () { prevLoading = false; });
+    }
+    function onScroll() {
+      if (raf) return;
+      raf = (window.requestAnimationFrame || function (f) { return setTimeout(f, 16); })(function () {
+        raf = null;
+        if (scrollTop() < 200) maybePrev();
+        checkFill();
+      });
+    }
+    function ensureSentinel() {
+      var root = postRoot();
+      if (!root || !root.parentNode) return;
+      if (sentinel && sentinel.parentNode) return;
+      sentinel = D.createElement('div');
+      sentinel.id = 'mlite-tail';
+      sentinel.style.cssText = 'height:1px;width:100%;overflow:hidden;';
+      root.parentNode.insertBefore(sentinel, root.nextSibling);
+      if (typeof IntersectionObserver === 'function') {
+        try {
+          io = new IntersectionObserver(function (es) {
+            for (var i = 0; i < es.length; i++) {
+              if (es[i].isIntersecting) { checkFill(); return; }
+            }
+          }, { rootMargin: '0px 0px ' + Math.round(vh() * preload) + 'px 0px' });
+          io.observe(sentinel);
+        } catch (e) {}
+      }
+    }
+    function start() {
+      if (started || !enabled) return;
+      if (!postRoot()) return;                 /* 非帖子页不启动 */
+      started = true;
+      curPage = pageFromUrl(location.href) || 1;
+      var s = byId('dumppage');
+      if (s) { var v = parseInt(s.value, 10); if (v > 0) curPage = v; }
+      nextFlush = curPage + 1;
+      nextReq = curPage + 1;
+      rememberFloors();
+      syncDump(curPage);
+      var homePg = pagerOf(D);
+      var homeNext = homePg.ok ? homePg.url : nextLinkOf(D);
+      var homeHas = homePg.ok ? homePg.hasNext : !!homeNext;
+      if (!homeHas) {                          /* 首屏就是末页（单页帖）：一次请求都不发 */
+        done = true;
+        doneWhy = 'last';
+        return;
+      }
+      nextUrl = homeNext || pageUrl(curPage + 1);
+      ensureSentinel();
+      /* 三路触发：捕获阶段监听所有滚动（内层容器也能收到）+ 哨兵 + 1s 轮询兜底 */
+      try {
+        D.addEventListener('scroll', onScroll, { passive: true, capture: true });
+      } catch (e) { window.addEventListener('scroll', onScroll, { passive: true }); }
+      window.addEventListener('resize', onScroll);
+      try {
+        D.addEventListener('visibilitychange', function () {
+          if (!D.hidden) setTimeout(checkFill, 200);
+        });
+      } catch (e) {}
+      poll = setInterval(function () {
+        if (done) { clearInterval(poll); poll = null; return; }
+        if (D.hidden) return;
+        checkFill();
+      }, 1000);
+      setTimeout(checkFill, 500);
+      setTimeout(function () { checkFill(); }, 1600);
+    }
+    return {
+      start: start,
+      checkFill: checkFill,
+      nearBottom: nearBottom,
+      info: function () {
+        return { cur: curPage, nextReq: nextReq, nextFlush: nextFlush,
+                 inflight: inflight, done: done, nextUrl: nextUrl };
+      }
+    };
+  })();
+
+  /* ---------------- 评论「回复」弹层：显示快捷菜单栏 + 输入落到弹层 ---------------- */
+  /* 页面上有两个同 id 的 textarea：
+       底部快速回复 #fastpostform > #needmessage
+       点某楼「回复」后的弹层 #ntcmsg_popmenu > #postforms > #needmessage
+     快捷菜单（原生 Chip 栏）里的 JS 一律 getElementById('needmessage')，只会拿到第一个，
+     所以弹层里既不会弹出菜单栏、就算弹出来也会插到底部那个框里。
+     这里的做法：弹层开着时把 getElementById('needmessage') 临时指到弹层里的那个 textarea，
+     并让原生把快捷菜单栏显示出来；弹层关掉再恢复。 */
+  (function () {
+    var barOn = 0;
+    var origGet = D.getElementById;
+    var patched = false;
+    var timer = null;
+
+    function popupBox() {
+      return byId('ntcmsg_popmenu') || D.querySelector('.dialogbox.comiis_textarea_box') ||
+             D.querySelector('.comiis_textarea_box');
+    }
+    function visible(el) {
+      try {
+        return !!el && el.offsetWidth > 0 && el.offsetHeight > 0 &&
+               getComputedStyle(el).display !== 'none' &&
+               getComputedStyle(el).visibility !== 'hidden';
+      } catch (e) { return false; }
+    }
+    function fastTextarea() { return D.querySelector('#fastpostform textarea[name="message"]'); }
+    function popTextarea() {
+      var p = popupBox(), t;
+      if (visible(p)) {
+        t = p.querySelector('textarea[name="message"]') || p.querySelector('textarea');
+        if (t) return t;
+      }
+      /* 兜底：模板换过、弹层 id 变了也能认出来 —— 页面里除底部快速回复之外，还可见的那个 */
+      var all = D.querySelectorAll('textarea[name="message"]'), i, el, f = fastTextarea();
+      for (i = 0; i < all.length; i++) {
+        el = all[i];
+        if (el === f) continue;
+        if (visible(el)) return el;
+      }
+      return null;
+    }
+    /* 底部快速回复框：模板里 .comiis_fastpostbox 默认 display:none，展开才变 block */
+    function fastBox() { return D.querySelector('.comiis_fastpostbox'); }
+    function fastOpen() {
+      var b = fastBox();
+      if (!b) return false;
+      try { return getComputedStyle(b).display !== 'none'; } catch (e) { return false; }
+    }
+
+    function patch(on) {
+      if (on && !patched) {
+        D.getElementById = function (id) {
+          if (id === 'needmessage') {
+            var t = popTextarea();
+            if (t) return t;
+          }
+          return origGet.call(D, id);
+        };
+        patched = true;
+      } else if (!on && patched) {
+        try { delete D.getElementById; } catch (e) { D.getElementById = origGet; }
+        if (D.getElementById !== origGet) D.getElementById = origGet;
+        patched = false;
+      }
+    }
+
+    function sync() {
+      watchPopup();
+      var on = popTextarea() ? 1 : 0;
+      patch(on);
+      var want = (on || fastOpen()) ? 1 : 0;
+      if (want === barOn) return;
+      barOn = want;
+      try { alert(want ? '点击了回复' : '关闭了回复'); } catch (e) {}
+    }
+
+    /* 弹层是网站自己 show/hide 的：只盯它一个节点的 style/class，
+       它一关就立刻收菜单栏，不用跟着轮询整个页面 */
+    var watched = null, mo = null, moTimer = null;
+    function watchPopup() {
+      if (typeof MutationObserver !== 'function') return;
+      var p = popupBox();
+      if (!p || p === watched) return;
+      try {
+        if (!mo) {
+          mo = new MutationObserver(function () {
+            if (moTimer) return;                 /* 动画期间 style 每帧都变，节流一下 */
+            moTimer = setTimeout(function () { moTimer = null; sync(); }, 150);
+          });
+        }
+        mo.disconnect();
+        mo.observe(p, { attributes: true, attributeFilter: ['style', 'class'] });
+        watched = p;
+      } catch (e) {}
+    }
+
+    /* 只在「有动作」时查一次：回复请求回来 / 点击 / 输入框聚焦 / 窗口尺寸变化。
+       以前是 500ms 轮询，而 popTextarea() 要读 offsetWidth，等于每 500ms 强制一次同步布局，
+       滚动、加载图片时尤其费；改成事件驱动后页面空闲时完全不做事。 */
+    function kick(times) {
+      var i, n = times || 1;
+      for (i = 0; i < n; i++) setTimeout(sync, 60 + i * 200);
+    }
+
+    /* 回复框是点「回复」后用 XHR 拉的：
+         forum.php?mod=post&action=reply&fid=..&tid=..&repquote=..&page=1&inajax=1
+       请求返回后弹层才插进 DOM，所以钩住它比轮询准得多 */
+    function isReplyRequest(u) {
+      u = String(u || '');
+      return u.indexOf('action=reply') >= 0 &&
+             (u.indexOf('mod=post') >= 0 || u.indexOf('inajax') >= 0);
+    }
+    function hookRequest() {
+      if (window.__mliteReplyHook) return;
+      window.__mliteReplyHook = 1;
+      try {
+        var xo = XMLHttpRequest.prototype.open, xs = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.open = function (m, u) {
+          try { this.__mliteUrl = String(u || ''); } catch (e) {}
+          return xo.apply(this, arguments);
+        };
+        XMLHttpRequest.prototype.send = function () {
+          var x = this;
+          try {
+            if (isReplyRequest(x.__mliteUrl)) {
+              x.addEventListener('loadend', function () { kick(3); });
+            }
+          } catch (e) {}
+          return xs.apply(this, arguments);
+        };
+      } catch (e) {}
+      try {
+        if (window.fetch) {
+          var f = window.fetch;
+          window.fetch = function (input) {
+            var u = (typeof input === 'string') ? input : ((input && input.url) || '');
+            var p = f.apply(this, arguments);
+            if (isReplyRequest(u)) {
+              try {
+                p.then(function () { kick(3); }, function () { kick(3); });
+              } catch (e) {}
+            }
+            return p;
+          };
+        }
+      } catch (e) {}
+    }
+
+    window.__mliteReplyBar = { sync: sync, popup: popTextarea, fast: fastBox };
+    if (!timer) {
+      timer = 1;
+      hookRequest();
+      D.addEventListener('click', function () { kick(3); }, true);
+      D.addEventListener('focusin', function () { setTimeout(sync, 60); }, true);
+      D.addEventListener('submit', function () { kick(2); }, true);
+      window.addEventListener('resize', function () { setTimeout(sync, 120); });
+      setTimeout(sync, 300);
+    }
+  })();
+
+  /* ---------------- 让「@某人」可点 ---------------- */
+  /* 手机模板里 @ 有时是纯文本、有时是 href="javascript:;" 的死链接，点了毫无反应；
+     这里统一接管：认得出 uid 就按 uid 开，认不出就用昵称拼 home.php?mod=space&username=…
+     （能走的正常链接不动，交给原生路由） */
+  (function () {
+    var CH = /[A-Za-z0-9_\-\u4e00-\u9fa5]/;
+    var NAME = /^([A-Za-z0-9_\-\u4e00-\u9fa5]{2,24})/;
+
+    function inPost(el) {
+      while (el && el.nodeType === 1) {
+        if (el.classList && (el.classList.contains('comiis_message') ||
+            el.classList.contains('comiis_message_table') ||
+            el.classList.contains('comiis_quote') ||
+            el.classList.contains('t_f') ||
+            /^postmessage_/.test(el.id || ''))) return true;
+        el = el.parentNode;
+      }
+      return false;
+    }
+    function caretAt(x, y) {
+      try {
+        if (D.caretRangeFromPoint) return D.caretRangeFromPoint(x, y);
+        if (D.caretPositionFromPoint) {
+          var p = D.caretPositionFromPoint(x, y);
+          if (p) return { startContainer: p.offsetNode, startOffset: p.offset };
+        }
+      } catch (e) {}
+      return null;
+    }
+    function nameAtPoint(x, y) {
+      var r = caretAt(x, y);
+      if (!r || !r.startContainer || r.startContainer.nodeType !== 3) return '';
+      var data = r.startContainer.data || '', off = r.startOffset, i = off, c, prev, m;
+      while (i > 0) {                       /* 从点击位置往前找 @ */
+        c = data.charAt(i - 1);
+        if (c === '@') break;
+        if (!CH.test(c)) return '';
+        i--;
+      }
+      if (i <= 0 || data.charAt(i - 1) !== '@') return '';
+      prev = data.charAt(i - 2);            /* @ 前面是字母/数字 → 多半是邮箱，不动 */
+      if (prev && CH.test(prev)) return '';
+      m = data.slice(i).match(NAME);
+      if (!m) return '';
+      if (off < i - 1 || off > i + m[1].length) return '';
+      return m[1];
+    }
+    function openUser(uid, name) {
+      try { alert('__MLITE_USER__|' + (uid || '') + '|' + (name || '')); } catch (e) {}
+    }
+    D.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || t.nodeType !== 1) return;
+      var a = t.closest ? t.closest('a') : null;
+      if (a) {
+        var href = a.getAttribute('href') || '';
+        if (/^\s*(javascript:|#|void\s*\()/i.test(href)) {
+          var txt = (a.textContent || '').replace(/^\s+/, '');
+          var nm = txt.charAt(0) === '@' ? txt.slice(1).match(NAME) : null;
+          if (nm) {
+            e.preventDefault(); e.stopPropagation();
+            openUser('', nm[1]);
+          }
+        }
+        return;
+      }
+      if (!inPost(t)) return;
+      var name = nameAtPoint(e.clientX, e.clientY);
+      if (name) {
+        e.preventDefault(); e.stopPropagation();
+        openUser('', name);
+      }
+    }, true);
+  })();
+
+  /* ---------------- 对外接口 ---------------- */
+  window.__mlitePlus = {
+    reload: function (cfg) {
+      CFG = cfg || window.__mliteCfg || CFG;
+      buildWords();
+      var fs = floors(), i;
+      for (i = 0; i < fs.length; i++) fs[i].removeAttribute('data-mlite-scanned');
+      applyBlock();
+    },
+    rescan: applyBlock,
+    blocked: function () { return D.querySelectorAll('[data-mlite-blocked]').length; },
+    notice: function () { return findNotice(); },
+    stopReply: stopReplyWatch,
+    pager: null
+  };
+  window.__mlitePager = Pager;
+  window.__mlitePlus.pager = Pager;
+  window.mliteDoReply = doReply;
+  window.mliteStopReply = stopReplyWatch;
+
+  startBlockObserver();
+  applyBlock();
+  startReplyWatch();
+  try { Pager.start(); } catch (e) {}
+})();
+]==]
+
+-- 注入脚本（每次页面加载结束调用）
+function 注入帖子增强()
+  local 回复开关 = 获取应用数据("回复可见自动回复") ~= "false"
+  local 屏蔽开关 = 获取应用数据("评论屏蔽") ~= "false"
+  local 翻页开关 = 获取应用数据("自动上下页") == "true"
+  local 并行数 = 初始化并行页数()
+  local 词表 = 屏蔽词列表()
+  local 词JS = {}
+  for _, 词 in ipairs(词表) do
+    table.insert(词JS, cjson.encode(词))
+  end
+  local 配置 = string.format(
+  "window.__mliteCfg={reply:%s,block:%s,pager:%s,parallel:%d,preload:2,words:[%s]};\n",
+  tostring(回复开关), tostring(屏蔽开关), tostring(翻页开关), 并行数, table.concat(词JS, ","))
+  加载Js(配置 .. 增强脚本)
+  return #词表
+end
+
+-- ============================ 对话框 ============================
+
+-- 回复可见询问框（回复内容只读，仅在设置页修改）
+function 回复可见对话框(tid)
+  local 内容 = 获取应用数据("自动回复内容")
+  if not 内容 or 内容 == "" then
+    内容 = "看看隐藏"
+  end
+  local 视图 = {
+    LinearLayout,
+    layout_width = "match",
+    orientation = 1,
+    padding = "20dp",
+    {
+      TextView,
+      text = "检测到本帖包含回复可见内容，是否自动回复？",
+      textSize = "15sp",
+      textColor = 主文本色,
+    },
+    {
+      TextView,
+      text = "回复内容：" .. 内容,
+      textSize = "13sp",
+      layout_marginTop = "10dp",
+      textColor = 主文本色,
+    },
+    {
+      TextView,
+      text = "如需修改，请到 设置 → Js → 自动回复内容",
+      textSize = "11sp",
+      layout_marginTop = "4dp",
+      textColor = 副文本色,
+    },
+  }
+  local 对话框 = AlertDialog.Builder(activity)
+  .setTitle("回复可见")
+  .setView(loadlayout(视图))
+  .setPositiveButton("自动回复", nil)
+  .setNegativeButton("取消", nil)
+  .show()
+  对话框.getButton(AlertDialog.BUTTON1).onClick = function()
+    if tid then
+      本地自动回复tid = tid
+      本地已提示tid = tid
+    end
+    对话框.dismiss()
+    加载Js("window.mliteDoReply && window.mliteDoReply(" .. cjson.encode(内容) .. ");")
+  end
+  对话框.getButton(AlertDialog.BUTTON2).onClick = function()
+    if tid then
+      本地已提示tid = tid
+    end
+    对话框.dismiss()
+  end
+end
+
+-- 屏蔽词编辑框
+function 屏蔽词编辑对话框(保存回调)
+  local 视图 = {
+    LinearLayout,
+    layout_width = "match",
+    orientation = 1,
+    padding = "16dp",
+    {
+      TextView,
+      text = "每行一条正则，包含即命中（如 看看|谢谢）。已预置常见水贴词正则。单条评论超过 10 个字不屏蔽；纯字母/数字/符号（不含 .）会直接屏蔽；楼主帖和回复别人的楼层不参与。",
+      textSize = "12sp",
+      textColor = 副文本色,
+    },
+    {
+      TextInputLayout,
+      id = "屏蔽词输入布局",
+      layout_width = "match",
+      layout_height = "wrap",
+      layout_marginTop = "10dp",
+      hint = "屏蔽词",
+      {
+        TextInputEditText,
+        id = "屏蔽词输入框",
+        text = 屏蔽词拼接文本(),
+        layout_width = "match",
+        layout_height = "220dp",
+        gravity = "top|left",
+        textSize = "14sp",
+      },
+    },
+  }
+  local 对话框 = AlertDialog.Builder(activity)
+  .setTitle("评论屏蔽词")
+  .setView(loadlayout(视图))
+  .setPositiveButton("保存", nil)
+  .setNegativeButton("取消", nil)
+  .setNeutralButton("清空", nil)
+  .show()
+  task(200, function()
+    local Context = luajava.bindClass("android.content.Context")
+    import "android.view.inputmethod.InputMethodManager"
+    pcall(function()
+      屏蔽词输入框.getContext().getSystemService(Context.INPUT_METHOD_SERVICE)
+      .toggleSoftInput(0, InputMethodManager.HIDE_NOT_ALWAYS)
+      屏蔽词输入框.requestFocus()
+    end)
+  end)
+  对话框.getButton(AlertDialog.BUTTON1).onClick = function()
+    local 文本 = ""
+    if 屏蔽词输入框 and 屏蔽词输入框.text then
+      文本 = tostring(屏蔽词输入框.text)
+    end
+    存储应用数据("评论屏蔽词", 文本)
+    对话框.dismiss()
+    if 保存回调 then
+      保存回调(屏蔽词数量文本())
+    end
+  end
+  对话框.getButton(AlertDialog.BUTTON2).onClick = function()
+    对话框.dismiss()
+  end
+  对话框.getButton(AlertDialog.BUTTON3).onClick = function()
+    存储应用数据("评论屏蔽词", "")
+    对话框.dismiss()
+    if 保存回调 then
+      保存回调(屏蔽词数量文本())
+    end
+  end
+end

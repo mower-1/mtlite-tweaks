@@ -1,0 +1,57 @@
+--- a/pages/yonghu/main.lua
++++ b/pages/yonghu/main.lua
+@@ -1,6 +1,7 @@
+ require "import"
+ 使用公共lua文件("libs")
+ import "gongyong"
++import "pm_plus"
+ 应用栏标题.setText("用户页").setVisibility(0)
+ 应用栏标题.setEllipsize(TextUtils.TruncateAt.MARQUEE)--设置跑马灯属性
+ 应用栏标题.setSelected(true)--设置选中状态
+@@ -47,6 +48,7 @@
+     end
+     主菜单.add("浏览器打开")
+     主菜单.add("复制链接")
++    主菜单.add("电脑版网页")
+     主菜单.add("退出页面")
+     popupMenu.onMenuItemClick=function(item)
+       switch item.title
+@@ -69,6 +71,8 @@
+         浏览器打开(获取网址())
+        case "复制链接"
+         复制文本(获取网址())
++       case "电脑版网页"
++         打开电脑版网页()
+        case "退出页面"
+         退子页面()
+       end
+@@ -132,6 +136,14 @@
+         应用栏标题.Text=a:match("\"(.-)\"").."的粉丝 - MT论坛" or "个人中心 - MT论坛"
+       end
+     end)
++  end
++  --私信页 + 私信发送结果页：触发“发送太快”限制后自动等待重发（带倒计时悬浮窗，可取消）
++  local 私信相关 = url and (url:match('mod=space&do=pm') or url:match('mod=spacecp&ac=pm'))
++  if 私信相关 then
++    local 注入成功,注入错误=pcall(注入私信增强)
++    if not 注入成功 then
++      print("私信增强注入失败："..tostring(注入错误))
++    end
+   end
+ end,nil,
+ function(_,view,webResourceRequest)
+@@ -233,7 +245,13 @@
+ function(super,view,title)
+   --获取到网页标题
+   应用栏标题.setText(title)
+-end,nil,nil,nil,nil,nil,
++end,nil,function(a,view,url,message,result)
++  --网页提示框：私信增强的内部消息（__MLITE_PM_*）在这里拦下，不弹给用户
++  if 私信处理消息(message) then
++    result.cancel()
++    return true
++  end
++end,nil,nil,nil,
+ function(superCall,view,progress)
+   --页面加载进度
+   view.parent.getChildAt(2).progress=progress
