@@ -35,6 +35,7 @@
 │   └── fam/                 ← 功能模块（mtforumlite.lua 等，原版未改动）
 ├── patches/                 ← 相对原版 1.7 的逐文件 unified diff（14 个文件）
 ├── tools/
+│   ├── rebuild.py           ← 一条命令出包（fap → apk → 签名 → 自检）
 │   ├── build_fap.py         ← 打 .fap（zip）
 │   ├── build_apk.py         ← 改 versionName + 替换 assets + 重打包
 │   ├── check_apk.py         ← 读版本号 / 对齐 / 完整性
@@ -62,10 +63,29 @@
 
 ## 构建
 
+改完源码，一条命令出包（fap → 未签名 APK → 签名 → 自检）：
+
+```bash
+python tools/rebuild.py
+#    → dist/mtlite-1.7.5.fap
+#    → dist/mtlite-1.7.5.apk   （已签名，检查通过）
+```
+
+| 需要的东西 | 放哪儿 |
+|---|---|
+| 原版 APK（底包） | `base/` 下任意 `.apk`，或环境变量 `BASE_APK` |
+| keystore | 环境变量 `KEYSTORE`，或仓库上一级的 `mtsign/*.p12`（自动找） |
+| keystore 口令 | 运行时输入，或环境变量 `KS_PASS`；别名用 `KS_ALIAS`，默认取文件名 |
+| `apksig.jar` | `tools/apksig.jar`，或环境变量 `APKSIG_JAR`（可从 Android SDK `build-tools/*/lib/` 拷） |
+
+只想出到未签名包：`python tools/rebuild.py --no-sign`。
+
+分步做也可以：
+
 ```bash
 # 1) 打 fap（其实就是一个 zip，app.json 在最前）
 python tools/build_fap.py
-#    → build/Mt论坛Lite重制版_1.7.5.fap
+#    → build/Mt论坛Lite重制版_<app.json 里的版本号>.fap
 
 # 2) 打 APK：改二进制 AndroidManifest 里的 versionName、替换 assets 里的工程文件
 python tools/build_apk.py
