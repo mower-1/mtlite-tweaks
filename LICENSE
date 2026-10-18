@@ -22,9 +22,9 @@ SOFTWARE.
 
 ---
 
-本许可只覆盖本仓库中由本仓库作者**新增或修改**的代码（`patches/` 里的补丁、
+本许可只覆盖本仓库中由本仓库作者新增或修改的代码（`patches/` 里的补丁、
 `tools/` 里的构建脚本、`docs/` 里的文档）。
 
-`src/fap` 与 `src/fam` 的基础部分来自第三方 App「Mt论坛Lite 重制版」，版权归其原作者
-（应用包名 `io.github.kawangya.mtforumlite`）。本仓库不主张这些部分的任何权利，
-也不分发原 App 的安装包。若原作者认为本仓库不妥，请联系删除。
+`original/` 与 `src/` 里的基础部分来自第三方 App「Mt论坛Lite 重制版」，
+版权归原作者所有（应用包名 `io.github.kawangya.mtforumlite`），本仓库不主张这些部分的任何权利。
+感谢原作者授权本仓库分发与修改。

@@ -1,11 +1,12 @@
 # Mt论坛Lite 增强补丁（1.7.5）
 
-给 **Fusion App** 工程「Mt论坛Lite 重制版 1.7」加的一批功能，以「已改好的工程 + 逐个文件补丁」两种形式发布。
+给 **Fusion App** 工程「Mt论坛Lite 重制版 1.7」加的一批功能。
+
+仓库里同时放了**原版 1.7 的工程源码**（`original/`）和**改好的 1.7.5 源码**（`src/`），
+外加逐文件补丁与构建脚本；[Releases](https://github.com/mower-1/mtlite-tweaks/releases) 里有可直接安装的 APK。
 
 合入后版本号为 **1.7.5**（`versionCode` 保持 7 不变），方便与原版共存识别。
-所有改动都写在工程内部的 Lua 与注入 JS 里，不碰原 App 的 dex。
-
-> ⚠️ 本仓库**不包含**原 App 的 APK / fap，也不包含作者的签名文件。你需要自备原版 1.7。
+所有改动都写在工程内部的 Lua 与注入 JS 里，不碰 dex。
 
 ---
 
@@ -28,9 +29,10 @@
 
 ```
 .
+├── original/fap/            ← 原版 1.7 的工程源码（未改动，用来对比 / 打补丁）
 ├── src/
-│   ├── fap/                 ← Fusion App 工程（已改好，可直接打包）
-│   └── fam/                 ← 功能模块（mtforumlite.lua 等）
+│   ├── fap/                 ← 1.7.5 的工程源码（已改好，可直接打包）
+│   └── fam/                 ← 功能模块（mtforumlite.lua 等，原版未改动）
 ├── patches/                 ← 相对原版 1.7 的逐文件 unified diff（14 个文件）
 ├── tools/
 │   ├── build_fap.py         ← 打 .fap（zip）
@@ -122,29 +124,6 @@ python /path/to/tools/apply_patches.py /path/to/patches .
 
 ---
 
-## 签名
-
-仓库**不包含任何 keystore**（私钥进了公开仓库，任何人都能签出被系统当作「官方更新」的包）。
-自己生成一个，步骤见 [`tools/README.md`](tools/README.md)。
-
-社区里流传的本补丁构建版本由下面这把钥匙签名，可以用它核对下载到的 APK 是不是原样：
-
-```
-Subject : CN=mtlite tweaks, O=mtlite, C=CN
-算法    : RSA 4096 / SHA256withRSA
-有效期  : 2026-10-18 ~ 2054-03-05
-SHA-256 : 16:5E:BE:55:55:1C:67:16:C7:32:BB:30:CE:39:57:A6:A0:1F:AF:5B:00:DD:17:5F:B2:8B:93:D0:CC:9A:3D:78
-```
-
-```bash
-keytool -printcert -jarfile 你的.apk     # 比对 SHA256 那一行
-```
-
-换了签名就不能覆盖安装，必须先卸载。反过来也一样：如果你自己生成 key 出包，
-别人装过别的签名的同版本，也装不上。
-
----
-
 ## 已知限制
 
 - **私信冷却时间服务端不会告诉你**，用的是设置里的固定秒数。设短了会被拒（不会自动翻倍，弹窗说明后点「重发」），设长了只是白等。
@@ -154,18 +133,10 @@ keytool -printcert -jarfile 你的.apk     # 比对 SHA256 那一行
 
 ---
 
-## 测试方式（没有真机也能查大半）
-
-- **Lua**：`pip install lupa`，把非 ASCII 字节替换成占位符后 `compile()`——中文标识符 LuaJIT 不认，但语法错能查出来。
-- **注入 JS**：`node --check` 过语法，再用最小 DOM 桩（`document / window / alert / XHR / DOMParser / MutationObserver`）跑一遍完整链路。
-- **打包**：`build_apk.py` 自带断言（versionName 字符串唯一、manifest 元素数、zip 完整性、`resources.arsc` 4 字节对齐）。
-
----
-
 ## 免责声明
 
-仅供学习交流。`src/fap`、`src/fam` 的基础部分版权归原 App 作者所有（包名 `io.github.kawangya.mtforumlite`），
-本仓库只发布增量改动，不分发原安装包、不含任何密钥或签名文件。
-使用本补丁可能违反论坛的用户协议，由此产生的一切后果由使用者自行承担。
+仅供学习交流。原 App 及其源码（`original/`）版权归原作者所有（包名 `io.github.kawangya.mtforumlite`），
+`src/`、`patches/`、`tools/`、`docs/` 里的整理与修改以 MIT 发布。
+使用前请遵守论坛的用户协议。
 
 如果这个仓库对你有帮助，欢迎把改法搬到你自己的工程里；发现论坛模板变了导致功能失效，欢迎提 issue 附上页面结构。
