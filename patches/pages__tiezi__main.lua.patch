@@ -86,7 +86,7 @@
         case "退出页面"
          退子页面()
        end
-@@ -79,13 +123,44 @@
+@@ -79,13 +123,34 @@
    local 帖子2=url:match'bbs%.binmt%.cc/forum%.php%?mod=viewthread&tid=.+'
    if 帖子 or 帖子2 then
      bottom.setVisibility(this.uiManager.viewPager.GONE)
@@ -119,20 +119,10 @@
 +    end
 +    return
 +  end
-+  if 是帖子 and 当前帖子标识() then
-+    --自动缓存：每次成功打开帖子都静默存一份，删帖前就已备好
-+    抓取网页HTML(view,function(html)
-+      if html then
-+        pcall(写入帖子缓存,当前帖子标识(),
-+          页面标题~="" and 页面标题 or ("帖子"..tostring(当前帖子标识())),
-+          tostring(url),html)
-+      end
-+    end)
-+  end
    if 获取应用数据("网页背景色")=="true" then
      加载Js([[document.body.style.backgroundColor = "]]..窗体背景色2..[[";]])
    end
-@@ -106,8 +181,67 @@
+@@ -106,8 +171,67 @@
       if (!patt.test(obj.innerHTML)) {
      obj.innerHTML=obj.innerHTML+'&nbsp;#<a href="'+obj2.attributes["href"].nodeValue+'">'+obj2.innerHTML+'</a>';
      }]])
@@ -202,7 +192,7 @@
    end
  end,nil,
  function(_,view,webResourceRequest)
-@@ -126,6 +260,8 @@
+@@ -126,6 +250,8 @@
    local 板块2=url:match'bbs%.binmt%.cc/forum%.php%?mod=forumdisplay'
    local 个人页=url:match'bbs%.binmt%.cc/home%.php%?mod=space&do=profile$'
    local 用户页=url:match'bbs%.binmt%.cc/home%.php%?mod=space&uid=.+&do=profile'
@@ -211,7 +201,7 @@
    local 等级=url:match'bbs%.binmt%.cc/home%.php%?mod=spacecp&ac=usergroup'
    local MT论坛=url:match'^https://bbs.binmt.cc/'
    local 回复成功=url:match'bbs%.binmt%.cc/forum%.php%?mod=viewthread&tid=.+&page=.+&extra=&mobile=.+#pid.+'
-@@ -154,6 +290,21 @@
+@@ -154,6 +280,21 @@
      进子页面("yonghu",{url})
      return true
     elseif 好友表 then
@@ -233,7 +223,7 @@
      return true
     elseif 板块 or 板块2 or 发帖子 then
      进子页面("bankuai",{url})
-@@ -306,19 +457,74 @@
+@@ -306,20 +447,66 @@
  function(a,view,url,message,result)
    result.cancel()
    if message=="点击了回复" then
@@ -254,16 +244,7 @@
      return true
     elseif message:match'下一页：(.-)' then
      Load_next_page(message:match'下一页：(.+)')
-+    --新评论页并入 DOM 后，顺手更新本地缓存
-+    task(2500,function()
-+      抓取网页HTML(view,function(html)
-+        if html then
-+          pcall(写入帖子缓存,当前帖子标识(),
-+            tostring(view.getTitle() or ""),获取网址() or "",html)
-+        end
-+      end)
-+    end)
-+    return true
+     return true
 +   elseif message=="__MLITE_REPLYVISIBLE__" then
 +    --网页检测到回复可见内容
 +    local tid=当前帖子标识()
@@ -307,6 +288,7 @@
 +    return true
 +   elseif message:sub(1,8)=="__MLITE_" then
 +    --其余增强模块内部消息直接吞掉，避免被当作文本弹出
-     return true
++    return true
     else
      print(message)
+     return true

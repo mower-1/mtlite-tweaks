@@ -151,16 +151,6 @@ function(superCall,view,url)
     end
     return
   end
-  if 是帖子 and 当前帖子标识() then
-    --自动缓存：每次成功打开帖子都静默存一份，删帖前就已备好
-    抓取网页HTML(view,function(html)
-      if html then
-        pcall(写入帖子缓存,当前帖子标识(),
-          页面标题~="" and 页面标题 or ("帖子"..tostring(当前帖子标识())),
-          tostring(url),html)
-      end
-    end)
-  end
   if 获取应用数据("网页背景色")=="true" then
     加载Js([[document.body.style.backgroundColor = "]]..窗体背景色2..[[";]])
   end
@@ -472,15 +462,6 @@ function(a,view,url,message,result)
     return true
    elseif message:match'下一页：(.-)' then
     Load_next_page(message:match'下一页：(.+)')
-    --新评论页并入 DOM 后，顺手更新本地缓存
-    task(2500,function()
-      抓取网页HTML(view,function(html)
-        if html then
-          pcall(写入帖子缓存,当前帖子标识(),
-            tostring(view.getTitle() or ""),获取网址() or "",html)
-        end
-      end)
-    end)
     return true
    elseif message=="__MLITE_REPLYVISIBLE__" then
     --网页检测到回复可见内容
