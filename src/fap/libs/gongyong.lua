@@ -819,7 +819,46 @@ function 历史收藏列表(标题,存储名)
 end
 
 --提取论坛 Cookie（含登录态）。弹窗展示，可一键复制。
+--提取 Cookie：先弹风险须知，确认按钮倒计时 5 秒后才能点
 function 提取Cookie对话框()
+  local 对话框=AlertDialog.Builder(this)
+  .setTitle("提取 Cookie 前请务必阅读")
+  .setMessage([[即将提取的是论坛的登录 Cookie，请先了解以下风险：
+
+一、Cookie 等同于你的账号凭证，持有者无需密码即可登录你的论坛账号，可发帖、私信、操作你的账户。
+
+二、请勿将它发送给任何人（包括"帮你修号""代抽"等理由），不要粘贴到群聊、帖子或任何网页输入框，不要随意截图。
+
+三、本功能仅建议用于自己备份、迁移登录或排查登录问题。
+
+四、如怀疑 Cookie 已泄露，请立即修改论坛密码（旧 Cookie 会随之失效），并检查账号的最近登录记录。
+
+点击下方按钮即表示你已知晓并接受上述风险。]])
+  .setPositiveButton("请阅读中（5 秒）",nil)
+  .setNegativeButton("取消",nil)
+  .show()
+  local 按钮=对话框.getButton(AlertDialog.BUTTON1)
+  按钮.setEnabled(false)
+  local 剩余秒数=5
+  local function 倒计时()
+    剩余秒数=剩余秒数-1
+    if 剩余秒数>0 then
+      按钮.setText("请阅读中（"..剩余秒数.." 秒）")
+      task(1000,倒计时)
+     else
+      按钮.setText("我已知晓风险，继续提取")
+      按钮.setEnabled(true)
+    end
+  end
+  task(1000,倒计时)
+  按钮.onClick=function()
+    对话框.dismiss()
+    显示Cookie对话框()
+  end
+end
+
+--Cookie 展示与复制（风险确认通过后才会到这里）
+function 显示Cookie对话框()
   local CookieManager=bindClass("android.webkit.CookieManager")
   local cookie=tostring(CookieManager.getInstance().getCookie("https://bbs.binmt.cc/") or "")
   if cookie=="" then
