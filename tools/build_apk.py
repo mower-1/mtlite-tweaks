@@ -221,6 +221,7 @@ def main():
     # 需要替换 / 新增的文件（APK 内路径 -> 本地路径）
     repl = {
         "assets/libs/gongyong.lua": os.path.join(SRC, "libs/gongyong.lua"),
+        "assets/libs/Function_bottom.lua": os.path.join(SRC, "libs/Function_bottom.lua"),
         "assets/libs/tiezi_plus.lua": os.path.join(SRC, "libs/tiezi_plus.lua"),
         "assets/libs/pm_plus.lua": os.path.join(SRC, "libs/pm_plus.lua"),
         "assets/pages/tiezi/main.lua": os.path.join(SRC, "pages/tiezi/main.lua"),

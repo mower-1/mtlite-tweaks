@@ -33,6 +33,16 @@ end
 if !获取应用数据("跨域请求") then
   存储应用数据("跨域请求","false")
 end
+--关闭页面左右滑动。本应用每个 ViewPager 只装一张视图，滑动本来没有作用；
+--而内置的旧版 androidx ViewPager 在多指触摸、弹窗打断时，会用已经失效的 pointerId
+--去调 getX()，抛 IllegalArgumentException: invalid pointerIndex -1，整个应用直接闪退。
+--关掉之后 ViewPager 不再参与触摸事件分发，异常路径也就没有了。
+pcall(function()
+  local 页面容器=this and this.uiManager and this.uiManager.viewPager
+  if 页面容器 and 页面容器.setUserInputEnabled then
+    页面容器.setUserInputEnabled(false)
+  end
+end)
 function print(内容)--底部
   自定义弹出(内容,nil,1,"15sp",强调色2,"13dp","18dp",fill,wrap,"50dp","0dp",主色2,nil,nil,330,nil)
 end

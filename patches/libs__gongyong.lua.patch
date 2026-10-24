@@ -1,6 +1,23 @@
 --- a/libs/gongyong.lua
 +++ b/libs/gongyong.lua
-@@ -94,6 +94,73 @@
+@@ -33,6 +33,16 @@
+ if !获取应用数据("跨域请求") then
+   存储应用数据("跨域请求","false")
+ end
++--关闭页面左右滑动。本应用每个 ViewPager 只装一张视图，滑动本来没有作用；
++--而内置的旧版 androidx ViewPager 在多指触摸、弹窗打断时，会用已经失效的 pointerId
++--去调 getX()，抛 IllegalArgumentException: invalid pointerIndex -1，整个应用直接闪退。
++--关掉之后 ViewPager 不再参与触摸事件分发，异常路径也就没有了。
++pcall(function()
++  local 页面容器=this and this.uiManager and this.uiManager.viewPager
++  if 页面容器 and 页面容器.setUserInputEnabled then
++    页面容器.setUserInputEnabled(false)
++  end
++end)
+ function print(内容)--底部
+   自定义弹出(内容,nil,1,"15sp",强调色2,"13dp","18dp",fill,wrap,"50dp","0dp",主色2,nil,nil,330,nil)
+ end
+@@ -94,6 +104,73 @@
  if !获取应用数据("自动上下页") then
    存储应用数据("自动上下页","false")
  end
@@ -74,11 +91,10 @@
  if !获取应用数据("自动签到") then
    存储应用数据("自动签到","false")
  end
-@@ -133,6 +200,113 @@
- end
+@@ -134,6 +211,113 @@
  if !获取应用数据("电脑UA") then
    存储应用数据("电脑UA","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-+end
+ end
 +
 +-- ============================ 电脑版网页 ============================
 +-- 页面右上角三个点 → 电脑版网页：用现成的「浏览页PC」打开当前地址。
@@ -185,6 +201,7 @@
 +    u = 主机 .. "/forum.php"
 +  end
 +  进子页面("liulanyepc",{电脑版网址(u)})
- end
++end
  if !获取应用数据("默认浏览页") then
    存储应用数据("默认浏览页","liulanye")
+ end

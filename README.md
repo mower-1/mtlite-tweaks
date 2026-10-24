@@ -1,11 +1,11 @@
-# Mt论坛Lite 增强补丁（1.7.5）
+# Mt论坛Lite 增强补丁（1.7.7）
 
 给 **Fusion App** 工程「Mt论坛Lite 重制版 1.7」加的一批功能。
 
-仓库里同时放了**原版 1.7 的工程源码**（`original/`）和**改好的 1.7.5 源码**（`src/`），
+仓库里同时放了**原版 1.7 的工程源码**（`original/`）和**改好的 1.7.7 源码**（`src/`），
 外加逐文件补丁与构建脚本；[Releases](https://github.com/mower-1/mtlite-tweaks/releases) 里有可直接安装的 APK。
 
-合入后版本号为 **1.7.5**（`versionCode` 保持 7 不变），方便与原版共存识别。
+合入后版本号为 **1.7.7**（`versionCode` 保持 7 不变），方便与原版共存识别。
 所有改动都写在工程内部的 Lua 与注入 JS 里，不碰 dex。
 
 ---
@@ -22,6 +22,8 @@
 | 弹层里的快捷菜单 | 自动生效 | 点某楼的「回复」弹出的小窗，底部也会出现加粗 / 斜体 / 下划线…。**事件驱动**（钩回复请求），没有轮询 |
 | 修：侧边栏「请登录 / 登录失效」 | 自动生效 | 原版判登录依赖装饰 cookie、昵称靠跨行正则，登录了也一直显示未登录。现在只认 `_auth` cookie |
 | 修：`@某人` 点了没反应 | 自动生效 | 原版路由把 `space-uid-123.html` 直接 `return true` 吞掉，连请求都不发。现在打开用户页，纯文本 `/ javascript:;` 形式的 @ 也能点 |
+| 修：回复时概率闪退 | 自动生效 | 内置的旧版 androidx ViewPager 在多指触摸、弹窗打断之后，会用已经失效的 pointerId 调 `getX()`，抛 `IllegalArgumentException: invalid pointerIndex -1` 直接崩。页面容器只装一张视图，本来就不需要左右滑动，现已关闭它的用户滑动，触摸事件不再走这条路径 |
+| 修：回复时闪退（续，1.7.7） | 自动生效 | 快捷菜单栏原来是一整个 RecyclerView（`LuaRecyclerAdapter`），底栏默认 GONE、回复时切成可见，会在这一帧重建全部 ViewHolder，适配器偶尔拿到失效的 LuaTable 或把布局当 LuaFunction 强转，抛 `Inconsistency detected` / `ClassCastException`。这一栏只有十来个固定按钮，已改为 `HorizontalScrollView` + 普通 `LinearLayout`，不再经过适配器 |
 
 ---
 
@@ -31,9 +33,9 @@
 .
 ├── original/fap/            ← 原版 1.7 的工程源码（未改动，用来对比 / 打补丁）
 ├── src/
-│   ├── fap/                 ← 1.7.5 的工程源码（已改好，可直接打包）
+│   ├── fap/                 ← 1.7.7 的工程源码（已改好，可直接打包）
 │   └── fam/                 ← 功能模块（mtforumlite.lua 等，原版未改动）
-├── patches/                 ← 相对原版 1.7 的逐文件 unified diff（14 个文件）
+├── patches/                 ← 相对原版 1.7 的逐文件 unified diff（15 个文件）
 ├── tools/
 │   ├── rebuild.py           ← 一条命令出包（fap → apk → 签名 → 自检）
 │   ├── build_fap.py         ← 打 .fap（zip）
@@ -67,8 +69,8 @@
 
 ```bash
 python tools/rebuild.py
-#    → dist/mtlite-1.7.5.fap
-#    → dist/mtlite-1.7.5.apk   （已签名，检查通过）
+#    → dist/mtlite-1.7.7.fap
+#    → dist/mtlite-1.7.7.apk   （已签名，检查通过）
 ```
 
 | 需要的东西 | 放哪儿 |
@@ -121,7 +123,7 @@ python /path/to/tools/apply_patches.py /path/to/patches .
 方便你手动合。之所以不用 `git apply`：Windows 上 `core.autocrlf=true` 会把补丁写回成 CRLF，
 而这个工程里的文件行尾并不统一。
 
-> 补丁共 14 个文件：`app.json` + 11 个改过的 lua + 2 个新增 lua（`libs/pm_plus.lua`、`libs/tiezi_plus.lua`）。
+> 补丁共 15 个文件：`app.json` + 12 个改过的 lua + 2 个新增 lua（`libs/pm_plus.lua`、`libs/tiezi_plus.lua`）。
 > 移植要点和验收用例见 [`docs/移植指南.md`](docs/移植指南.md)。
 
 ---

@@ -629,41 +629,33 @@ local layout={
   background=窗体背景色2;--布局背景
   orientation='horizontal';--布局方向
   {
-    RecyclerView,
-    id="recycler_view",
+    HorizontalScrollView,
     layout_width="match",
-    layout_height="wrap",
+    layout_height="match_parent",
+    {
+      LinearLayout,
+      layout_width="wrap",
+      layout_height="match_parent",
+      orientation="horizontal",
+    },
   },
 };
 
-local list_item={
-  LinearLayout,
-  layout_width="wrap",
-  layout_height="wrap",
-  {
-    Chip;
-    layout_width="wrap";
-    layout_height="match_parent";
-    layout_marginLeft='5dp';--布局左距
-    layout_marginRight='5dp';--布局右距
-    id="text",
-    TextSize="15";
-    TextColor=主文本色2;
-  };
-}
 local viewGroup=this.uiManager.getViewPager().parent
 viewGroup.addView(loadlayout(layout))
-recycler_view.layoutManager=LinearLayoutManager(activity)
-recycler_view.layoutManager.setOrientation(0)
+local 滚动区=bottom.getChildAt(0)
+pcall(function() 滚动区.setHorizontalScrollBarEnabled(false) end)
+local 快捷栏=滚动区.getChildAt(0)
 
 local cjson=require("cjson")
 local data=cjson.decode(获取应用数据("快捷菜单"))
 
-local adapter=LuaRecyclerAdapter(activity,data,list_item)
-adapter.clickViewId="text"
-adapter.onItemClick=function(adapter,itemView,view,pos)
-  --简单获取到当前item的Data表
-  local itemData = adapter.Data[pos+1]
+--原来这一栏由 LuaRecyclerAdapter 托管：底栏默认 GONE，回复时切成可见，RecyclerView
+--会在这一帧重建全部 ViewHolder，而 Fusion 的 Lua 适配器此时要么读到失效的 LuaTable
+--（Inconsistency detected / Invalid item position），要么把布局当成 LuaFunction 强转
+--LuaTable（ClassCastException），两种都是直接闪退。这里只是一组固定按钮，不需要
+--回收复用，改成普通 LinearLayout 逐个添加。
+local function 快捷菜单点击(itemData)
   switch(itemData.text)
    case "加粗"
     加载Js([[
@@ -1210,8 +1202,26 @@ if (str){
     ]])
    default
     加载Js([[
-     insertText(document.getElementById('needmessage'),']]..adapter.Data[pos+1].Content..[[');
+     insertText(document.getElementById('needmessage'),']]..itemData.Content..[[');
     ]])
   end
 end
-recycler_view.adapter=adapter
+
+--逐个塞进横向布局。按钮数量固定（最多十几个），不需要 ViewHolder 复用。
+local 密度=activity.getResources().getDisplayMetrics().density
+local function dp(值) return math.floor(值*密度+0.5) end
+--套一层 pcall：万一某些主题下 Chip 构造失败，也只是没有快捷按钮，不至于整页打不开
+pcall(function()
+  for _,项 in ipairs(data or {}) do
+    local chip=Chip(activity)
+    chip.setText(项.text or "")
+    chip.setTextSize(15)
+    chip.setTextColor(主文本色 or 0xFF000000)
+    chip.setCheckable(false)
+    chip.setOnClickListener(function() 快捷菜单点击(项) end)
+    local lp=LinearLayout.LayoutParams(-2,-1)
+    lp.leftMargin=dp(5)
+    lp.rightMargin=dp(5)
+    快捷栏.addView(chip,lp)
+  end
+end)
