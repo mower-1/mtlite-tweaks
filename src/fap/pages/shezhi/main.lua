@@ -23,6 +23,7 @@ end
   { __type = 1, title = "应用" },
   { __type = 3, subtitle = "拓展功能", message = "不常用的拓展功能设置" },
   { __type = 3, subtitle = "检测更新", message = "检测软件最新版本" },
+  { __type = 3, subtitle = "提取Cookie", message = "查看 / 复制论坛登录 Cookie" },
   --{ __type = 3, subtitle = "查看更新", message = "查看本软件下载链接" },
   { __type = 6},
   { __type = 1, title = "快捷" },
@@ -40,6 +41,7 @@ end
   { __type = 5, subtitle = "私信限速自动重发", message = "每条私信发完即开始计时，窗口内的发送自动排队到点补发", status = { Checked = 获取应用数据("私信限速自动重发") == "true" } },
   { __type = 3, subtitle = "限速等待秒数", message = 私信等待文本() },
   { __type = 5, subtitle = "显示FPS", message = "在网页左上角显示FPS帧率", status = { Checked = 获取应用数据("显示FPS") == "true" } },
+  { __type = 5, subtitle = "下拉刷新", message = "帖子页用下拉手势刷新，隐藏右下角刷新按钮", status = { Checked = 获取应用数据("下拉刷新") == "true" } },
   { __type = 6},
   { __type = 1, title = "其他" },
   --{ __type = 3, subtitle = "检测修复", message = "如部分功能报错可尝试该功能" },
@@ -446,6 +448,14 @@ if 传递数据 then
         end
        case "编辑菜单"
         编辑快捷菜单对话框()
+       case "提取Cookie"
+        提取Cookie对话框()
+       case "下拉刷新"
+        if item.status.Checked then
+          print("已开启\n帖子页拉到顶部继续下拉即刷新，右下角刷新按钮会隐藏")
+         else
+          print("已关闭\n恢复右下角刷新按钮")
+        end
        case "检测更新"
         if 获取包名()=="net.fusionapp" then
           软件名="Mt论坛Lite重制版"

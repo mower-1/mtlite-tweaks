@@ -1,11 +1,11 @@
-# Mt论坛Lite 增强补丁（1.7.7）
+# Mt论坛Lite 增强补丁（1.7.6）
 
 给 **Fusion App** 工程「Mt论坛Lite 重制版 1.7」加的一批功能。
 
-仓库里同时放了**原版 1.7 的工程源码**（`original/`）和**改好的 1.7.7 源码**（`src/`），
+仓库里同时放了**原版 1.7 的工程源码**（`original/`）和**改好的 1.7.6 源码**（`src/`），
 外加逐文件补丁与构建脚本；[Releases](https://github.com/mower-1/mtlite-tweaks/releases) 里有可直接安装的 APK。
 
-合入后版本号为 **1.7.7**（`versionCode` 保持 7 不变），方便与原版共存识别。
+合入后版本号为 **1.7.6**（`versionCode` 保持 7 不变），方便与原版共存识别。
 所有改动都写在工程内部的 Lua 与注入 JS 里，不碰 dex。
 
 ---
@@ -23,7 +23,9 @@
 | 修：侧边栏「请登录 / 登录失效」 | 自动生效 | 原版判登录依赖装饰 cookie、昵称靠跨行正则，登录了也一直显示未登录。现在只认 `_auth` cookie |
 | 修：`@某人` 点了没反应 | 自动生效 | 原版路由把 `space-uid-123.html` 直接 `return true` 吞掉，连请求都不发。现在打开用户页，纯文本 `/ javascript:;` 形式的 @ 也能点 |
 | 修：回复时概率闪退 | 自动生效 | 内置的旧版 androidx ViewPager 在多指触摸、弹窗打断之后，会用已经失效的 pointerId 调 `getX()`，抛 `IllegalArgumentException: invalid pointerIndex -1` 直接崩。页面容器只装一张视图，本来就不需要左右滑动，现已关闭它的用户滑动，触摸事件不再走这条路径 |
-| 修：回复时闪退（续，1.7.7） | 自动生效 | 快捷菜单栏原来是一整个 RecyclerView（`LuaRecyclerAdapter`），底栏默认 GONE、回复时切成可见，会在这一帧重建全部 ViewHolder，适配器偶尔拿到失效的 LuaTable 或把布局当 LuaFunction 强转，抛 `Inconsistency detected` / `ClassCastException`。这一栏只有十来个固定按钮，已改为 `HorizontalScrollView` + 普通 `LinearLayout`，不再经过适配器 |
+| 修：回复时闪退（续，1.7.6） | 自动生效 | 快捷菜单栏原来是一整个 RecyclerView（`LuaRecyclerAdapter`），底栏默认 GONE、回复时切成可见，会在这一帧重建全部 ViewHolder，适配器偶尔拿到失效的 LuaTable 或把布局当 LuaFunction 强转，抛 `Inconsistency detected` / `ClassCastException`。这一栏只有十来个固定按钮，已改为 `HorizontalScrollView` + 普通 `LinearLayout`，不再经过适配器 |
+| 提取Cookie | 设置 → 应用 | 弹窗展示论坛当前 Cookie（含登录态），标注字符数，可一键复制；未登录时提示先登录 |
+| 下拉刷新 | 设置 → Js | 开启后帖子页在顶部继续下拉即刷新，右下角刷新按钮隐藏；关闭则恢复按钮。⋮ 菜单里的「网页刷新」保留兜底 |
 
 ---
 
@@ -33,7 +35,7 @@
 .
 ├── original/fap/            ← 原版 1.7 的工程源码（未改动，用来对比 / 打补丁）
 ├── src/
-│   ├── fap/                 ← 1.7.7 的工程源码（已改好，可直接打包）
+│   ├── fap/                 ← 1.7.6 的工程源码（已改好，可直接打包）
 │   └── fam/                 ← 功能模块（mtforumlite.lua 等，原版未改动）
 ├── patches/                 ← 相对原版 1.7 的逐文件 unified diff（15 个文件）
 ├── tools/
@@ -69,8 +71,8 @@
 
 ```bash
 python tools/rebuild.py
-#    → dist/mtlite-1.7.7.fap
-#    → dist/mtlite-1.7.7.apk   （已签名，检查通过）
+#    → dist/mtlite-1.7.6.fap
+#    → dist/mtlite-1.7.6.apk   （已签名，检查通过）
 ```
 
 | 需要的东西 | 放哪儿 |
@@ -141,6 +143,7 @@ python /path/to/tools/apply_patches.py /path/to/patches .
 | 并行加载页数 | 3 | 自动上下页预取的页数 |
 | 私信限速自动重发 | 开 | |
 | 限速等待秒数 | **16** | 可选 10 / 16 / 20 / 30 / 45；服务端实际限制比这个长时会被拒，弹窗提示后手动重发 |
+| 下拉刷新 | 关 | 帖子页改用下拉手势刷新，隐藏右下角刷新按钮 |
 
 「电脑版网页」在 版块 / 搜索 / 签到 / 帖子 / 个人中心 / 主页 / 精华 这 7 个页面的 ⋮ 菜单里。
 

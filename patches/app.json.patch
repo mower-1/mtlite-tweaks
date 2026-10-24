@@ -3,5 +3,5 @@
 @@ -1 +1 @@
 -{"modules":["mtforumlite"],"name":"Mt论坛Lite重制版","packageName":"io.github.kawangya.mtforumlite","theme":"ThemeBright.json","userPermission":["INTERNET","ACCESS_NETWORK_STATE","WRITE_EXTERNAL_STORAGE","READ_EXTERNAL_STORAGE","REQUEST_INSTALL_PACKAGES"],"versionCode":7,"versionName":"1.7"}
 \ No newline at end of file
-+{"modules":["mtforumlite"],"name":"Mt论坛Lite重制版","packageName":"io.github.kawangya.mtforumlite","theme":"ThemeBright.json","userPermission":["INTERNET","ACCESS_NETWORK_STATE","WRITE_EXTERNAL_STORAGE","READ_EXTERNAL_STORAGE","REQUEST_INSTALL_PACKAGES"],"versionCode":7,"versionName":"1.7.7"}
++{"modules":["mtforumlite"],"name":"Mt论坛Lite重制版","packageName":"io.github.kawangya.mtforumlite","theme":"ThemeBright.json","userPermission":["INTERNET","ACCESS_NETWORK_STATE","WRITE_EXTERNAL_STORAGE","READ_EXTERNAL_STORAGE","REQUEST_INSTALL_PACKAGES"],"versionCode":7,"versionName":"1.7.6"}
 \ No newline at end of file

@@ -31,6 +31,10 @@ if 传递数据 then
  else
   退子页面()
 end
+--「下拉刷新」开启时隐藏刷新按钮（悬浮按钮），改用下拉手势；菜单里保留「网页刷新」兜底
+local function 显示刷新按钮()
+  return 获取应用数据("显示悬浮按钮")~="false" and 获取应用数据("下拉刷新")~="true"
+end
 左上角按钮().onClick=function(v)
   退子页面()
 end;
@@ -43,7 +47,7 @@ end;
     主菜单.add("网页审查")
     主菜单.add("添加收藏")
     主菜单.add("原网页菜单")
-    if 获取应用数据("显示悬浮按钮")=="false" then
+    if not 显示刷新按钮() then
       主菜单.add("网页刷新")
     end
     主菜单.add("浏览器打开")
@@ -91,7 +95,7 @@ function(superCall,view,url,favicon)
   local 帖子2=url:match'bbs%.binmt%.cc/forum%.php%?mod=viewthread&tid=.+'
   if 帖子 or 帖子2 then
     bottom.setVisibility(this.uiManager.viewPager.GONE)
-    if 获取应用数据("显示悬浮按钮")=="true" then
+    if 显示刷新按钮() then
       悬浮按钮.setVisibility(this.uiManager.viewPager.VISIBLE)
     end
   end
@@ -123,6 +127,28 @@ function(superCall,view,url)
   local 注入成功,注入错误=pcall(注入帖子增强)
   if not 注入成功 then
     print("增强脚本注入失败："..tostring(注入错误))
+  end
+  --下拉刷新：在顶部继续下拉超过阈值就触发刷新（走 alert 通知原生）
+  if 获取应用数据("下拉刷新")=="true" then
+    加载Js([[
+      (function(){
+        if (window.__mlitePTR) return; window.__mlitePTR = 1;
+        var sy = 0, on = false;
+        document.addEventListener('touchstart', function(e){
+          if (e.touches.length !== 1) { on = false; return; }
+          sy = e.touches[0].clientY;
+          on = (window.pageYOffset <= 0);
+        }, {passive: true});
+        document.addEventListener('touchmove', function(e){
+          if (!on) return;
+          var dy = e.touches[0].clientY - sy;
+          if (dy < 0 || window.pageYOffset > 0) { on = false; return; }
+          if (dy > 100) { on = false; alert('__MLITE_PTR__'); }
+        }, {passive: true});
+        document.addEventListener('touchend', function(){ on = false; }, {passive: true});
+        document.addEventListener('touchcancel', function(){ on = false; }, {passive: true});
+      })();
+    ]])
   end
 end,nil,
 function(_,view,webResourceRequest)
@@ -338,14 +364,14 @@ end,nil,
 function(a,view,url,message,result)
   result.cancel()
   if message=="点击了回复" then
-    if 获取应用数据("显示悬浮按钮")=="true" then
+    if 显示刷新按钮() then
       悬浮按钮.setVisibility(this.uiManager.viewPager.GONE)
     end
     bottom.setVisibility(this.uiManager.viewPager.VISIBLE)
     return true
    elseif message=="关闭了回复" then
     bottom.setVisibility(this.uiManager.viewPager.GONE)
-    if 获取应用数据("显示悬浮按钮")=="true" then
+    if 显示刷新按钮() then
       悬浮按钮.setVisibility(this.uiManager.viewPager.VISIBLE)
     end
     return true
@@ -388,6 +414,10 @@ function(a,view,url,message,result)
      elseif 名字 and 名字~="" then
       进子页面("yonghu",{"https://bbs.binmt.cc/home.php?mod=space&username="..名字.."&do=profile&mobile=2"})
     end
+    return true
+   elseif message=="__MLITE_PTR__" then
+    --下拉刷新手势触发
+    刷新网页()
     return true
    elseif message:sub(1,8)=="__MLITE_" then
     --其余增强模块内部消息直接吞掉，避免被当作文本弹出

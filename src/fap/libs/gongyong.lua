@@ -778,6 +778,42 @@ function 历史收藏列表(标题,存储名)
   recycler_view.adapter=adapter
 end
 
+--提取论坛 Cookie（含登录态）。弹窗展示，可一键复制。
+function 提取Cookie对话框()
+  local CookieManager=bindClass("android.webkit.CookieManager")
+  local cookie=tostring(CookieManager.getInstance().getCookie("https://bbs.binmt.cc/") or "")
+  if cookie=="" then
+    print2("没有取到 Cookie\n请先在软件里登录一次")
+    return
+  end
+  local 布局={
+    ScrollView,
+    layout_width="fill",
+    layout_height="fill",
+    {
+      TextView,
+      layout_width="fill",
+      layout_height="wrap",
+      padding="20dp",
+      textSize="12sp",
+      textColor=主文本色,
+      Text=cookie,
+      id="Cookie文本框",
+    },
+  }
+  local 对话框视图=loadlayout(布局)
+  Cookie文本框.setTextIsSelectable(true)
+  AlertDialog.Builder(this)
+  .setTitle("Cookie（"..cookie:len().." 字符）")
+  .setView(对话框视图)
+  .setPositiveButton("复制",{onClick=function()
+    复制文本(cookie)
+    print("已复制 "..cookie:len().." 个字符")
+  end})
+  .setNegativeButton("关闭",nil)
+  .show()
+end
+
 function 编辑快捷菜单对话框()
   import "com.google.android.flexbox.*"
   import "androidx.recyclerview.widget.*"
