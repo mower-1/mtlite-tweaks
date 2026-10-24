@@ -238,8 +238,11 @@ def main():
     }
     # 原版 APK 里没有、需要新增的 lua（紧跟 gongyong 插入）
     new_libs = ["assets/libs/tiezi_plus.lua", "assets/libs/pm_plus.lua"]
-    # 原版 APK 里没有、需要新增的页面（紧跟 shezhi 页面插入）
-    new_pages = ["assets/pages/huancun/main.lua"]
+    # 原版 APK 里没有、需要新增的页面（紧跟 shezhi 页面插入；view.json/control.json 必须一起带上，
+    # 缺了它们 Fusion 不会初始化页面骨架，uiManager 为 nil，页面必然崩）
+    new_pages = ["assets/pages/huancun/main.lua",
+                 "assets/pages/huancun/view.json",
+                 "assets/pages/huancun/control.json"]
     # app.json 里的 versionName 同步（versionCode 不变）
     app = json.load(open(os.path.join(SRC, "app.json"), encoding="utf-8"))
     app["versionName"] = NEW_VERSION_NAME
