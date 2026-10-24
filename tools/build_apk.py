@@ -238,6 +238,8 @@ def main():
     }
     # 原版 APK 里没有、需要新增的 lua（紧跟 gongyong 插入）
     new_libs = ["assets/libs/tiezi_plus.lua", "assets/libs/pm_plus.lua"]
+    # 原版 APK 里没有、需要新增的页面（紧跟 shezhi 页面插入）
+    new_pages = ["assets/pages/huancun/main.lua"]
     # app.json 里的 versionName 同步（versionCode 不变）
     app = json.load(open(os.path.join(SRC, "app.json"), encoding="utf-8"))
     app["versionName"] = NEW_VERSION_NAME
@@ -267,6 +269,12 @@ def main():
                     d = open(p, "rb").read()
                     out.append((nf, 8, zlib.crc32(d) & 0xFFFFFFFF, len(d), deflate(d), False))
                 inserted = True
+            elif name == "assets/pages/shezhi/main.lua":
+                # 新页面紧跟 shezhi
+                for nf in new_pages:
+                    rel = nf[len("assets/"):]
+                    d = open(os.path.join(SRC, rel), "rb").read()
+                    out.append((nf, 8, zlib.crc32(d) & 0xFFFFFFFF, len(d), deflate(d), False))
         else:
             out.append((name, method, crc, usize,
                         raw if method == 0 else raw, True))

@@ -452,7 +452,7 @@ if 传递数据 then
        case "提取Cookie"
         提取Cookie对话框()
        case "已缓存的帖子"
-        已缓存帖子对话框()
+        进子页面("huancun")
        case "下拉刷新"
         if item.status.Checked then
           print("已开启\n帖子页拉到顶部继续下拉即刷新，右下角刷新按钮会隐藏")
