@@ -97,6 +97,8 @@ function(superCall,view,url,favicon)
     bottom.setVisibility(this.uiManager.viewPager.GONE)
     if 显示刷新按钮() then
       悬浮按钮.setVisibility(this.uiManager.viewPager.VISIBLE)
+     else
+      悬浮按钮.setVisibility(this.uiManager.viewPager.GONE)
     end
   end
 end,
@@ -128,12 +130,35 @@ function(superCall,view,url)
   if not 注入成功 then
     print("增强脚本注入失败："..tostring(注入错误))
   end
-  --下拉刷新：在顶部继续下拉超过阈值就触发刷新（走 alert 通知原生）
+  --下拉刷新：内容跟随手指下移（阻尼 1/2），松手超过阈值才刷新；走 alert 通知原生
   if 获取应用数据("下拉刷新")=="true" then
     加载Js([[
       (function(){
         if (window.__mlitePTR) return; window.__mlitePTR = 1;
-        var sy = 0, on = false;
+        var TH = 120, MAX = 160;
+        var sy = 0, on = false, dy = 0, tip = null;
+        function ensureTip(){
+          if (tip) return tip;
+          tip = document.createElement('div');
+          tip.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);'
+            + 'z-index:2147483000;padding:6px 16px;border-radius:18px;background:rgba(0,0,0,0.55);'
+            + 'color:#fff;font-size:13px;line-height:1.4;pointer-events:none;'
+            + 'transition:opacity .15s;opacity:0;white-space:nowrap;';
+          document.documentElement.appendChild(tip);
+          return tip;
+        }
+        function setPull(d, ready){
+          document.body.style.transition = 'none';
+          document.body.style.transform = d > 0 ? 'translateY(' + d + 'px)' : '';
+          var t = ensureTip();
+          t.textContent = ready ? '松开刷新' : '下拉刷新';
+          t.style.opacity = d > 0 ? '1' : '0';
+        }
+        function reset(){
+          document.body.style.transition = 'transform .25s';
+          document.body.style.transform = '';
+          if (tip) tip.style.opacity = '0';
+        }
         document.addEventListener('touchstart', function(e){
           if (e.touches.length !== 1) { on = false; return; }
           sy = e.touches[0].clientY;
@@ -141,12 +166,23 @@ function(superCall,view,url)
         }, {passive: true});
         document.addEventListener('touchmove', function(e){
           if (!on) return;
-          var dy = e.touches[0].clientY - sy;
-          if (dy < 0 || window.pageYOffset > 0) { on = false; return; }
-          if (dy > 100) { on = false; alert('__MLITE_PTR__'); }
+          if (e.touches.length !== 1) { on = false; reset(); return; }
+          var raw = e.touches[0].clientY - sy;
+          if (raw < 0 || window.pageYOffset > 0) { on = false; reset(); return; }
+          dy = Math.min(raw / 2, MAX);
+          setPull(dy, raw >= TH);
         }, {passive: true});
-        document.addEventListener('touchend', function(){ on = false; }, {passive: true});
-        document.addEventListener('touchcancel', function(){ on = false; }, {passive: true});
+        document.addEventListener('touchend', function(){
+          if (!on) return;
+          on = false;
+          var go = dy >= TH / 2;
+          dy = 0;
+          reset();
+          if (go) alert('__MLITE_PTR__');
+        }, {passive: true});
+        document.addEventListener('touchcancel', function(){
+          on = false; dy = 0; reset();
+        }, {passive: true});
       })();
     ]])
   end
@@ -373,6 +409,8 @@ function(a,view,url,message,result)
     bottom.setVisibility(this.uiManager.viewPager.GONE)
     if 显示刷新按钮() then
       悬浮按钮.setVisibility(this.uiManager.viewPager.VISIBLE)
+     else
+      悬浮按钮.setVisibility(this.uiManager.viewPager.GONE)
     end
     return true
    elseif message:match'下一页：(.-)' then
