@@ -1,6 +1,57 @@
 --- a/libs/gongyong.lua
 +++ b/libs/gongyong.lua
-@@ -33,6 +33,16 @@
+@@ -22,8 +22,48 @@
+ RelativeSizeSpan = bindClass "android.text.style.RelativeSizeSpan"
+ SubscriptSpan = bindClass("android.text.style.SubscriptSpan")
+ SuperscriptSpan = bindClass "android.text.style.SuperscriptSpan"
+-主色,强调色,主文本色,副文本色,窗体背景色=获取主题配色()--返回整数颜色值
+-主色2,强调色2,主文本色2,副文本色2,窗体背景色2=获取主题配色(1)--返回十六进制#
++--主题色来自功能模块（mtforumlite）。个别情况下模块的自动加载会缺席（如直接打开某个子页面，
++--曾导致「已缓存的帖子」灰屏报错：attempt to call a nil value 获取主题配色），这里手动补载一次；
++--仍失败就退到默认色，保证页面至少能打开。
++if not 获取主题配色 then
++  pcall(function() import "mtforumlite.mtforumlite" end)
++end
++if not 获取主题配色 then
++  --import 还不行就按 package.path 里登记的模块根目录直接 dofile
++  pcall(function()
++    for 段 in package.path:gmatch("[^;]+") do
++      local 前缀=段:match("^(.-)/lua/%?%.lua$")
++      if 前缀 then
++        local 路径=前缀.."/lua/mtforumlite/mtforumlite.lua"
++        local f=io.open(路径,"r")
++        if f then f:close() dofile(路径) break end
++      end
++    end
++  end)
++end
++if 获取主题配色 then
++  主色,强调色,主文本色,副文本色,窗体背景色=获取主题配色()--返回整数颜色值
++  主色2,强调色2,主文本色2,副文本色2,窗体背景色2=获取主题配色(1)--返回十六进制#
++ else
++  主色,强调色,主文本色,副文本色,窗体背景色=0xFF3F51B5,0xFFFF4081,0xDE000000,0x8A000000,0xFFFFFFFF
++  主色2,强调色2,主文本色2,副文本色2,窗体背景色2="#3F51B5","#FF4081","#212121","#9E9E9E","#FFFFFF"
++end
++--给小弹窗加「点击即复制」：print / print2 的弹窗由 自定义弹出 创建（Toast + 自定义视图），
++--这里包一层，弹窗出现后给正文挂上点击监听，点一下整条文本进剪贴板。
++--注意：Fusion 运行时自身的页面级报错（doFile 失败）走的是系统默认 Toast，不经过这里。
++if 自定义弹出 then
++  local 原始弹出=自定义弹出
++  自定义弹出=function(内容,...)
++    原始弹出(内容,...)
++    pcall(function()
++      local 弹窗文本=text
++      弹窗文本.setOnClickListener(function()
++        复制文本(弹窗文本.getText().toString())
++        弹窗文本.setText(弹窗文本.getText().toString().."（已复制）")
++      end)
++    end)
++  end
++end
+ if !获取应用数据("http抓包请求") then
+   存储应用数据("http抓包请求","false")
+ end
+@@ -33,6 +73,16 @@
  if !获取应用数据("跨域请求") then
    存储应用数据("跨域请求","false")
  end
@@ -17,7 +68,7 @@
  function print(内容)--底部
    自定义弹出(内容,nil,1,"15sp",强调色2,"13dp","18dp",fill,wrap,"50dp","0dp",主色2,nil,nil,330,nil)
  end
-@@ -94,6 +104,73 @@
+@@ -94,6 +144,73 @@
  if !获取应用数据("自动上下页") then
    存储应用数据("自动上下页","false")
  end
@@ -91,7 +142,7 @@
  if !获取应用数据("自动签到") then
    存储应用数据("自动签到","false")
  end
-@@ -134,6 +211,113 @@
+@@ -134,6 +251,113 @@
  if !获取应用数据("电脑UA") then
    存储应用数据("电脑UA","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
  end
@@ -205,7 +256,7 @@
  if !获取应用数据("默认浏览页") then
    存储应用数据("默认浏览页","liulanye")
  end
-@@ -594,6 +778,120 @@
+@@ -594,6 +818,110 @@
    recycler_view.adapter=adapter
  end
  
@@ -246,7 +297,7 @@
 +end
 +
 +-- ===== 帖子本地缓存 =====
-+--存整页渲染后的 HTML（含已加载的评论），键为 tid，上限 50 篇，超出自动删最旧的。
++--存整页渲染后的 HTML（含已加载的评论），键为 tid，不设上限，由用户在缓存页自行删除。
 +--帖子被删后打开会命中「提示信息」错误页，此时自动改显本地缓存。
 +帖子缓存目录=activity.getExternalFilesDir(nil).toString().."/postcache"
 +function 帖子缓存表()
@@ -288,39 +339,29 @@
 +      if tostring(v.tid)~=tostring(tid) then table.insert(新表,v) end
 +    end
 +    table.insert(新表,1,{tid=tid,title=标题,url=url,time=os.date("%Y-%m-%d %H:%M"),file=文件.toString()})
-+    while #新表>50 do
-+      local 旧=table.remove(新表)
-+      pcall(function() os.remove(旧.file) end)
-+    end
 +    保存帖子缓存表(新表)
 +  end)
 +  return 成功,错误
 +end
 +function 已缓存数量文本()
-+  return "当前 "..#帖子缓存表().." 篇（上限 50 篇，超出自动删最旧的）"
++  return "当前 "..#帖子缓存表().." 篇（不设上限）"
 +end
-+function 已缓存帖子对话框()
-+  local t=帖子缓存表()
-+  if #t==0 then
-+    print2("还没有缓存\n在帖子页 ⋮ 菜单点「缓存帖子」即可保存当前页面")
-+    return
++function 删除帖子缓存(tid)
++  local 新表={}
++  for _,v in ipairs(帖子缓存表()) do
++    if tostring(v.tid)==tostring(tid) then
++      pcall(function() os.remove(v.file) end)
++     else
++      table.insert(新表,v)
++    end
 +  end
-+  local 标题s={}
-+  for i,v in ipairs(t) do
-+    标题s[i]=(v.title or ("帖子"..v.tid)).."\n"..v.time
++  保存帖子缓存表(新表)
++end
++function 清空帖子缓存()
++  for _,x in ipairs(帖子缓存表()) do
++    pcall(function() os.remove(x.file) end)
 +  end
-+  AlertDialog.Builder(this)
-+  .setTitle("已缓存的帖子（"..#t.."）")
-+  .setItems(标题s,{onClick=function(v,p)
-+    进子页面("tiezi",{t[p+1].url})
-+  end})
-+  .setNeutralButton("清空",{onClick=function(v)
-+    for _,x in ipairs(t) do pcall(function() os.remove(x.file) end) end
-+    保存帖子缓存表({})
-+    print("已清空全部帖子缓存")
-+  end})
-+  .setNegativeButton("关闭",nil)
-+  .show()
++  保存帖子缓存表({})
 +end
 +
  function 编辑快捷菜单对话框()

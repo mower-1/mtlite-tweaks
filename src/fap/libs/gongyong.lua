@@ -22,8 +22,48 @@ TextUtils = bindClass("android.text.TextUtils")
 RelativeSizeSpan = bindClass "android.text.style.RelativeSizeSpan"
 SubscriptSpan = bindClass("android.text.style.SubscriptSpan")
 SuperscriptSpan = bindClass "android.text.style.SuperscriptSpan"
-主色,强调色,主文本色,副文本色,窗体背景色=获取主题配色()--返回整数颜色值
-主色2,强调色2,主文本色2,副文本色2,窗体背景色2=获取主题配色(1)--返回十六进制#
+--主题色来自功能模块（mtforumlite）。个别情况下模块的自动加载会缺席（如直接打开某个子页面，
+--曾导致「已缓存的帖子」灰屏报错：attempt to call a nil value 获取主题配色），这里手动补载一次；
+--仍失败就退到默认色，保证页面至少能打开。
+if not 获取主题配色 then
+  pcall(function() import "mtforumlite.mtforumlite" end)
+end
+if not 获取主题配色 then
+  --import 还不行就按 package.path 里登记的模块根目录直接 dofile
+  pcall(function()
+    for 段 in package.path:gmatch("[^;]+") do
+      local 前缀=段:match("^(.-)/lua/%?%.lua$")
+      if 前缀 then
+        local 路径=前缀.."/lua/mtforumlite/mtforumlite.lua"
+        local f=io.open(路径,"r")
+        if f then f:close() dofile(路径) break end
+      end
+    end
+  end)
+end
+if 获取主题配色 then
+  主色,强调色,主文本色,副文本色,窗体背景色=获取主题配色()--返回整数颜色值
+  主色2,强调色2,主文本色2,副文本色2,窗体背景色2=获取主题配色(1)--返回十六进制#
+ else
+  主色,强调色,主文本色,副文本色,窗体背景色=0xFF3F51B5,0xFFFF4081,0xDE000000,0x8A000000,0xFFFFFFFF
+  主色2,强调色2,主文本色2,副文本色2,窗体背景色2="#3F51B5","#FF4081","#212121","#9E9E9E","#FFFFFF"
+end
+--给小弹窗加「点击即复制」：print / print2 的弹窗由 自定义弹出 创建（Toast + 自定义视图），
+--这里包一层，弹窗出现后给正文挂上点击监听，点一下整条文本进剪贴板。
+--注意：Fusion 运行时自身的页面级报错（doFile 失败）走的是系统默认 Toast，不经过这里。
+if 自定义弹出 then
+  local 原始弹出=自定义弹出
+  自定义弹出=function(内容,...)
+    原始弹出(内容,...)
+    pcall(function()
+      local 弹窗文本=text
+      弹窗文本.setOnClickListener(function()
+        复制文本(弹窗文本.getText().toString())
+        弹窗文本.setText(弹窗文本.getText().toString().."（已复制）")
+      end)
+    end)
+  end
+end
 if !获取应用数据("http抓包请求") then
   存储应用数据("http抓包请求","false")
 end
