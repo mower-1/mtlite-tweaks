@@ -14,6 +14,18 @@ function 当前帖子标识()
   local tid=链接:match("thread%-(%d+)") or 链接:match("tid=(%d+)")
   return tid or 链接
 end
+--读到的缓存页置真，下一次页面加载完成事件直接跳过，避免增强脚本在缓存页里乱跑
+缓存阅读中=false
+--异步取当前整页 HTML（含已加载的评论），经 cjson 还原成 Lua 字符串
+function 抓取网页HTML(浏览器,回调)
+  pcall(function()
+    浏览器.evaluateJavascript("(function(){return document.documentElement.outerHTML;})()",
+      luajava.createProxy("android.webkit.ValueCallback",{onReceiveValue=function(v)
+        local 成功,html=pcall(function() return require("cjson").decode(tostring(v)) end)
+        回调(成功 and html or nil)
+      end}))
+  end)
+end
 应用栏标题.setText("加载中...").setVisibility(0)
 应用栏标题.setEllipsize(TextUtils.TruncateAt.MARQUEE)--设置跑马灯属性
 应用栏标题.setSelected(true)--设置选中状态
@@ -46,6 +58,7 @@ end;
     主菜单.add("网页查找")
     主菜单.add("网页审查")
     主菜单.add("添加收藏")
+    主菜单.add("缓存帖子")
     主菜单.add("原网页菜单")
     if not 显示刷新按钮() then
       主菜单.add("网页刷新")
@@ -60,6 +73,21 @@ end;
         网页查找对话框()
        case "添加收藏"
         添加收藏对话框(获取浏览器(nil).title,获取浏览器(nil).url)
+       case "缓存帖子"
+        local 浏览器=获取浏览器(0)
+        抓取网页HTML(浏览器,function(html)
+          if not html then
+            print("缓存失败：无法读取页面内容")
+            return
+          end
+          local ok=pcall(写入帖子缓存,当前帖子标识(),
+            tostring(浏览器.getTitle() or ""),获取网址() or "",html)
+          if ok then
+            print2("已缓存当前帖子\n含已加载到页面里的评论，可在 设置→已缓存的帖子 查看")
+           else
+            print("缓存失败：写入文件出错")
+          end
+        end)
        case "原网页菜单"
         加载Js([[document.getElementsByClassName("comiis_share_key")[0].click();]])
        case "网页刷新"
@@ -104,6 +132,35 @@ function(superCall,view,url,favicon)
 end,
 function(superCall,view,url)
   --页面加载结束事件
+  if 缓存阅读中 then
+    --这一页是我们加载的本地缓存，跳过全部注入
+    缓存阅读中=false
+    return
+  end
+  local 页面标题=tostring(view.getTitle() or "")
+  local 是帖子=url:match'bbs%.binmt%.cc/thread%-.-%-.+' or url:match'bbs%.binmt%.cc/forum%.php%?mod=viewthread&tid=.+'
+  if 是帖子 and 页面标题:find("提示信息",1,true)==1 then
+    --帖子被删 / 审核中 / 无权限：Discuz 的提示信息错误页，尝试改显本地缓存
+    local 缓存=读取帖子缓存(当前帖子标识())
+    local html=缓存 and 读缓存HTML(缓存)
+    if html then
+      缓存阅读中=true
+      view.loadDataWithBaseURL("https://bbs.binmt.cc/",html,"text/html","utf-8",nil)
+      pcall(function() 悬浮按钮.setVisibility(悬浮按钮.GONE) end)
+      print2("原帖已删除或无法访问\n已显示本地缓存（"..缓存.time.."）")
+    end
+    return
+  end
+  if 是帖子 and 当前帖子标识() then
+    --自动缓存：每次成功打开帖子都静默存一份，删帖前就已备好
+    抓取网页HTML(view,function(html)
+      if html then
+        pcall(写入帖子缓存,当前帖子标识(),
+          页面标题~="" and 页面标题 or ("帖子"..tostring(当前帖子标识())),
+          tostring(url),html)
+      end
+    end)
+  end
   if 获取应用数据("网页背景色")=="true" then
     加载Js([[document.body.style.backgroundColor = "]]..窗体背景色2..[[";]])
   end
@@ -415,6 +472,15 @@ function(a,view,url,message,result)
     return true
    elseif message:match'下一页：(.-)' then
     Load_next_page(message:match'下一页：(.+)')
+    --新评论页并入 DOM 后，顺手更新本地缓存
+    task(2500,function()
+      抓取网页HTML(view,function(html)
+        if html then
+          pcall(写入帖子缓存,当前帖子标识(),
+            tostring(view.getTitle() or ""),获取网址() or "",html)
+        end
+      end)
+    end)
     return true
    elseif message=="__MLITE_REPLYVISIBLE__" then
     --网页检测到回复可见内容

@@ -814,6 +814,84 @@ function 提取Cookie对话框()
   .show()
 end
 
+-- ===== 帖子本地缓存 =====
+--存整页渲染后的 HTML（含已加载的评论），键为 tid，上限 50 篇，超出自动删最旧的。
+--帖子被删后打开会命中「提示信息」错误页，此时自动改显本地缓存。
+帖子缓存目录=activity.getExternalFilesDir(nil).toString().."/postcache"
+function 帖子缓存表()
+  local cjson=require("cjson")
+  local t=cjson.decode(获取应用数据("帖子缓存表") or "[]")
+  return t or {}
+end
+function 保存帖子缓存表(t)
+  local cjson=require("cjson")
+  存储应用数据("帖子缓存表",cjson.encode(t))
+end
+function 读取帖子缓存(tid)
+  for _,v in ipairs(帖子缓存表()) do
+    if tostring(v.tid)==tostring(tid) then return v end
+  end
+end
+function 读缓存HTML(v)
+  if not (v and v.file) then return nil end
+  local f=io.open(v.file,"r")
+  if not f then return nil end
+  local html=f:read("*a")
+  f:close()
+  if html=="" then return nil end
+  return html
+end
+function 写入帖子缓存(tid,标题,url,html)
+  local 成功,错误=pcall(function()
+    local File=bindClass("java.io.File")
+    local 目录=File(帖子缓存目录)
+    if not 目录.exists() then 目录.mkdirs() end
+    --打标记：缓存页里的增强脚本全部跳过，避免弹自动回复之类
+    html=html:gsub("<head>","<head><script>window.__MLITE_CACHE__=1;</script>",1)
+    local 文件=File(目录,"tid_"..tid..".html")
+    local f=io.open(文件.toString(),"w")
+    f:write(html)
+    f:close()
+    local 新表={}
+    for _,v in ipairs(帖子缓存表()) do
+      if tostring(v.tid)~=tostring(tid) then table.insert(新表,v) end
+    end
+    table.insert(新表,1,{tid=tid,title=标题,url=url,time=os.date("%Y-%m-%d %H:%M"),file=文件.toString()})
+    while #新表>50 do
+      local 旧=table.remove(新表)
+      pcall(function() os.remove(旧.file) end)
+    end
+    保存帖子缓存表(新表)
+  end)
+  return 成功,错误
+end
+function 已缓存数量文本()
+  return "当前 "..#帖子缓存表().." 篇（自动保留最近 50 篇）"
+end
+function 已缓存帖子对话框()
+  local t=帖子缓存表()
+  if #t==0 then
+    print2("还没有缓存\n打开过的帖子会自动缓存，也可在帖子页 ⋮ 菜单手动缓存")
+    return
+  end
+  local 标题s={}
+  for i,v in ipairs(t) do
+    标题s[i]=(v.title or ("帖子"..v.tid)).."\n"..v.time
+  end
+  AlertDialog.Builder(this)
+  .setTitle("已缓存的帖子（"..#t.."）")
+  .setItems(标题s,{onClick=function(v,p)
+    进子页面("tiezi",{t[p+1].url})
+  end})
+  .setNeutralButton("清空",{onClick=function(v)
+    for _,x in ipairs(t) do pcall(function() os.remove(x.file) end) end
+    保存帖子缓存表({})
+    print("已清空全部帖子缓存")
+  end})
+  .setNegativeButton("关闭",nil)
+  .show()
+end
+
 function 编辑快捷菜单对话框()
   import "com.google.android.flexbox.*"
   import "androidx.recyclerview.widget.*"

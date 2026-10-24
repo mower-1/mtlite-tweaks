@@ -24,6 +24,7 @@ end
   { __type = 3, subtitle = "拓展功能", message = "不常用的拓展功能设置" },
   { __type = 3, subtitle = "检测更新", message = "检测软件最新版本" },
   { __type = 3, subtitle = "提取Cookie", message = "查看 / 复制论坛登录 Cookie" },
+  { __type = 3, subtitle = "已缓存的帖子", message = 已缓存数量文本() },
   --{ __type = 3, subtitle = "查看更新", message = "查看本软件下载链接" },
   { __type = 6},
   { __type = 1, title = "快捷" },
@@ -450,6 +451,8 @@ if 传递数据 then
         编辑快捷菜单对话框()
        case "提取Cookie"
         提取Cookie对话框()
+       case "已缓存的帖子"
+        已缓存帖子对话框()
        case "下拉刷新"
         if item.status.Checked then
           print("已开启\n帖子页拉到顶部继续下拉即刷新，右下角刷新按钮会隐藏")
