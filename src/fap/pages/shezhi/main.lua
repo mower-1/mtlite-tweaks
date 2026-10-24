@@ -976,7 +976,17 @@ if 传递数据 then
         关于应用文本.append("\n\n重置版开发者：")
         关于应用文本.append("\n二改-mower-1")
         关于应用文本.setSpan(URLSpan("https://github.com/mower-1"),关于应用文本.length()-Java字符数("mower-1"),关于应用文本.length(),Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        关于应用文本.append("\n三改-（论坛账号待补充）")
+        关于应用文本.append("\n三改-")
+        关于应用文本.append("论坛账号（uid 153405）")
+        关于应用文本.setSpan(ClickableSpan({
+          onClick=function(view)
+            进子页面("yonghu",{"https://bbs.binmt.cc/home.php?mod=space&uid=153405&do=profile"})
+          end,
+          updateDrawState=function(ds)
+            ds.setColor(强调色) --设置颜色
+            ds.setUnderlineText(false) --去掉下划线
+          end
+        }),关于应用文本.length()-Java字符数("论坛账号（uid 153405）"),关于应用文本.length(),Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用=AlertDialog.Builder(this)
         .setTitle("关于软件")
         .setMessage(关于应用文本)
