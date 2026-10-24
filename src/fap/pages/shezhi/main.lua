@@ -825,8 +825,6 @@ if 传递数据 then
             ds.setUnderlineText(false) --去掉下划线
           end
         }),167,172,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        关于应用文本.append("\n二改-mower-1")
-        关于应用文本.setSpan(URLSpan("https://github.com/mower-1"),关于应用文本.length()-Java字符数("mower-1"),关于应用文本.length(),Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\n三改-割草机Mow")
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -849,8 +847,8 @@ if 传递数据 then
           end
         }),210,219,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("本软件开发工具")
-        关于应用文本.setSpan(SuperscriptSpan(), 219,226,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        关于应用文本.setSpan(RelativeSizeSpan(0.7), 219,226,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(SuperscriptSpan(), 208,215,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(RelativeSizeSpan(0.7), 208,215,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nAdam·Eva")--1252237203
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -861,8 +859,8 @@ if 传递数据 then
           end
         }),227,235,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("提供了许多技术上的帮助及开源项目")
-        关于应用文本.setSpan(SuperscriptSpan(), 235,251,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        关于应用文本.setSpan(RelativeSizeSpan(0.7), 235,251,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(SuperscriptSpan(), 224,240,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(RelativeSizeSpan(0.7), 224,240,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\njies辰")--1584645350
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -873,8 +871,8 @@ if 传递数据 then
           end
         }),252,257,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("提供了许多技术上的帮助及开源项目")
-        关于应用文本.setSpan(SuperscriptSpan(), 257,273,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        关于应用文本.setSpan(RelativeSizeSpan(0.7), 257,273,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(SuperscriptSpan(), 246,262,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(RelativeSizeSpan(0.7), 246,262,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nkamihitoe")--3357212590
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -885,8 +883,8 @@ if 传递数据 then
           end
         }),274,283,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("提供了许多技术上的帮助及开源项目")
-        关于应用文本.setSpan(SuperscriptSpan(), 283,299,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        关于应用文本.setSpan(RelativeSizeSpan(0.7), 283,299,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(SuperscriptSpan(), 272,288,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(RelativeSizeSpan(0.7), 272,288,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\ndingyi")--2187778735
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -897,8 +895,8 @@ if 传递数据 then
           end
         }),300,306,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("提供了许多开源项目")
-        关于应用文本.setSpan(SuperscriptSpan(), 306,315,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        关于应用文本.setSpan(RelativeSizeSpan(0.7), 306,315,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(SuperscriptSpan(), 295,304,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(RelativeSizeSpan(0.7), 295,304,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\n壹影")--203455278
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -909,15 +907,15 @@ if 传递数据 then
           end
         }),316,318,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("提供了网页可视化修改并生成js的JsHD调试器工具")
-        关于应用文本.setSpan(SuperscriptSpan(), 318,343,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        关于应用文本.setSpan(RelativeSizeSpan(0.7), 318,343,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(SuperscriptSpan(), 307,332,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(RelativeSizeSpan(0.7), 307,332,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\n\nMT官方信息：")
         关于应用文本.append("\nMT官网：mt2.cn")
-        关于应用文本.setSpan(URLSpan("https://mt2.cn/"),358,364,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(URLSpan("https://mt2.cn/"),347,353,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nMT小店：shop.mt2.cn")
-        关于应用文本.setSpan(URLSpan("https://shop.mt2.cn/"),370,381,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(URLSpan("https://shop.mt2.cn/"),359,370,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nMT论坛：bbs.binmt.cc")
-        关于应用文本.setSpan(URLSpan("https://bbs.binmt.cc/"),387,399,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(URLSpan("https://bbs.binmt.cc/"),376,388,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nQQ频道：hpt52ikey6")
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
