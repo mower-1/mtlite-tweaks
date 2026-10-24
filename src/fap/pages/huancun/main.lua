@@ -60,9 +60,6 @@ local 单条布局={
   MaterialCardView,
   layout_width="match",
   layout_height="wrap",
-  layout_margin="8dp",
-  layout_marginLeft="16dp",
-  layout_marginRight="16dp",
   cardBackgroundColor=主色2,
   cardElevation="0dp",
   radius="12dp",
@@ -95,6 +92,10 @@ local 单条布局={
   },
 }
 
+local function dp(值)
+  return math.floor(值*activity.getResources().getDisplayMetrics().density+0.5)
+end
+
 local function 打开(v)
   进子页面("tiezi",{v.url})
 end
@@ -120,7 +121,7 @@ function 刷新列表()
       TextView,
       layout_width="match",
       layout_height="wrap",
-      layout_marginTop="80dp",
+      paddingTop="80dp",
       gravity="center",
       textSize="14sp",
       textColor=副文本色,
@@ -131,6 +132,11 @@ function 刷新列表()
   for i=1,#t do
     local v=t[i]
     local 卡片=loadlayout(单条布局)
+    --loadlayout 的根节点带 layout_margin 会崩（根的 LayoutParams 是普通 LayoutParams，
+    --没有 setMargins），所以卡片边距在加载后程序化设置
+    local lp=LinearLayout.LayoutParams(-1,-2)
+    lp.setMargins(dp(16),dp(6),dp(16),dp(8))
+    卡片.setLayoutParams(lp)
     条目标题.setText(v.title or ("帖子"..tostring(v.tid)))
     条目时间.setText("缓存于 "..tostring(v.time).."　·　点按打开，长按删除")
     卡片.setOnClickListener(function() 打开(v) end)

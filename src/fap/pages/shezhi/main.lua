@@ -794,7 +794,7 @@ if 传递数据 then
             ds.setUnderlineText(false) --去掉下划线
           end
         }),18,24,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        关于应用文本.append("\n\n本软件二改于Mt论坛Lite，原版已开源，如有兴趣可点击下方链接前往查看。")
+        关于应用文本.append("\n\n本软件二改于MT论坛Lite重制版，原作者与二改源码均已开源，见下方链接。")
         关于应用文本.append("\n开源地址：https://wwi.lanzouo.com/b0d1pmq7a")
         关于应用文本.setSpan(ForegroundColorSpan(转换颜色值("#FFFF0000")),26,64,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.setSpan(URLSpan("https://wwi.lanzouo.com/b0d1pmq7a"),69,102,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -961,6 +961,22 @@ if 传递数据 then
           end
         }),403,412,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\n\n"..签名未通过)
+        --重置版信息（追加在末尾；偏移用 length() 动态算，不影响上方硬编码的 span）
+        local function Java字符数(str)
+          local _,续=tostring(str):gsub("[\128-\191]","")
+          return #tostring(str)-续
+        end
+        关于应用文本.append("\n\n──── 重置版信息 ────")
+        关于应用文本.append("\n本软件二改于MT论坛Lite重制版。")
+        关于应用文本.setSpan(ForegroundColorSpan(转换颜色值("#FFFF0000")),关于应用文本.length()-Java字符数("本软件二改于MT论坛Lite重制版。"),关于应用文本.length(),Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.append("\n本软件开源地址：https://github.com/mower-1/mtlite-tweaks")
+        关于应用文本.setSpan(URLSpan("https://github.com/mower-1/mtlite-tweaks"),关于应用文本.length()-Java字符数("https://github.com/mower-1/mtlite-tweaks"),关于应用文本.length(),Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.append("\n二改作者主页：https://github.com/mower-1")
+        关于应用文本.setSpan(URLSpan("https://github.com/mower-1"),关于应用文本.length()-Java字符数("https://github.com/mower-1"),关于应用文本.length(),Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.append("\n\n重置版开发者：")
+        关于应用文本.append("\n二改-mower-1")
+        关于应用文本.setSpan(URLSpan("https://github.com/mower-1"),关于应用文本.length()-Java字符数("mower-1"),关于应用文本.length(),Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.append("\n三改-（论坛账号待补充）")
         关于应用=AlertDialog.Builder(this)
         .setTitle("关于软件")
         .setMessage(关于应用文本)
