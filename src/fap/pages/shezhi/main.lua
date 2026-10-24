@@ -22,7 +22,8 @@ end
   { __type = 6},
   { __type = 1, title = "应用" },
   { __type = 3, subtitle = "拓展功能", message = "不常用的拓展功能设置" },
-  { __type = 3, subtitle = "检测更新", message = "检测软件最新版本" },
+  { __type = 3, subtitle = "检测原版更新", message = "检测原作者 Mt论坛Lite 的新版本" },
+  { __type = 3, subtitle = "检测改版更新", message = "检测重置版的新版本（简库资源网）" },
   { __type = 3, subtitle = "提取Cookie", message = "查看 / 复制论坛登录 Cookie" },
   { __type = 3, subtitle = "已缓存的帖子", message = 已缓存数量文本() },
   --{ __type = 3, subtitle = "查看更新", message = "查看本软件下载链接" },
@@ -459,7 +460,7 @@ if 传递数据 then
          else
           print("已关闭\n恢复右下角刷新按钮")
         end
-       case "检测更新"
+       case "检测原版更新"
         if 获取包名()=="net.fusionapp" then
           软件名="Mt论坛Lite重制版"
         end
@@ -496,7 +497,8 @@ if 传递数据 then
           end
           新版本=content:match(软件名..":(.-);")
           下载链接="https://kawangya.github.io/fullbackup/"..软件名.."_"..新版本..".apk"
-          if tostring(版本名)~=tostring(新版本) then
+          if 版本号比较(版本名,新版本)<0 then
+            --按数值比较：本地比服务器旧才提示，避免重置版被误报"发现新版本"
             更新框=AlertDialog.Builder(this)--普通对话框
             .setMessage("发现新版本："..软件名.."_"..新版本.."\n\n注：更新文档与更新文件存储于GitHub，如无法加载或下载请尝试使用魔法。")
             .setPositiveButton("更新",nil)
@@ -526,6 +528,36 @@ if 传递数据 then
             更新框2.getButton(AlertDialog.BUTTON3).onClick=function()
               进子页面(获取应用数据("默认浏览页"),{"https://xiyatu.lanzouq.com/b00hr7mm3a"})
             end
+          end
+        end)
+       case "检测改版更新"
+        加载对话框 = ProgressDialog(this)
+        加载对话框.setProgressStyle(ProgressDialog.STYLE_SPINNER)
+        加载对话框.setMessage("正在检查重置版更新...")
+        加载对话框.setCancelable(true)
+        加载对话框.show()
+        Http.get("https://www.jiankuapp.com/app/detail?id=566",function(code,content)
+          加载对话框.hide()
+          if code~=200 then
+            print2("网络异常 "..code.."\n简库资源网暂时无法访问，请稍后再试")
+            return
+          end
+          local 新版本=content:match("版本%s*v?([%d%.]+)")
+          if not 新版本 then
+            print2("未解析到版本号\n页面结构可能变化，请直接到简库资源网查看")
+            return
+          end
+          if 版本号比较(版本名,新版本)<0 then
+            更新框=AlertDialog.Builder(this)
+            .setMessage("发现重置版新版本："..新版本.."\n\n当前版本："..tostring(版本名).."\n\n下载页在简库资源网，下载线路指向 GitHub Releases。")
+            .setPositiveButton("打开下载页",nil)
+            .setNegativeButton("下次再说",nil)
+            .show()
+            更新框.getButton(AlertDialog.BUTTON1).onClick=function()
+              进子页面(获取应用数据("默认浏览页"),{"https://www.jiankuapp.com/app/detail?id=566"})
+            end
+           else
+            print2("当前已是最新版（"..tostring(版本名).."）")
           end
         end)
        case "查看更新"
