@@ -794,16 +794,10 @@ if 传递数据 then
             ds.setUnderlineText(false) --去掉下划线
           end
         }),18,24,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        关于应用文本.append("\n\n本软件二改于MT论坛Lite重制版，原作者与二改源码均已开源，见下方链接。")
+        关于应用文本.append("\n\n本软件二改于Mt论坛Lite，原版已开源，如有兴趣可点击下方链接前往查看。")
         关于应用文本.append("\n开源地址：https://wwi.lanzouo.com/b0d1pmq7a")
         关于应用文本.setSpan(ForegroundColorSpan(转换颜色值("#FFFF0000")),26,64,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.setSpan(URLSpan("https://wwi.lanzouo.com/b0d1pmq7a"),69,102,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        local function Java字符数(str)
-          local _,续=tostring(str):gsub("[\128-\191]","")
-          return #tostring(str)-续
-        end
-        关于应用文本.append("\n三改开源地址：https://github.com/mower-1/mtlite-tweaks")
-        关于应用文本.setSpan(URLSpan("https://github.com/mower-1/mtlite-tweaks"),关于应用文本.length()-Java字符数("https://github.com/mower-1/mtlite-tweaks"),关于应用文本.length(),Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\n\n开发者：")
         关于应用文本.append("\n原-小白·马(飞)")
         关于应用文本.setSpan(ClickableSpan({
@@ -814,7 +808,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),157,166,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }),109,118,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\n现-月牙鸣")
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -824,17 +818,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),167,172,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        关于应用文本.append("\n三改-割草机Mow")
-        关于应用文本.setSpan(ClickableSpan({
-          onClick=function(view)
-            进子页面("yonghu",{"https://bbs.binmt.cc/home.php?mod=space&uid=153405&do=profile"})
-          end,
-          updateDrawState=function(ds)
-            ds.setColor(强调色) --设置颜色
-            ds.setUnderlineText(false) --去掉下划线
-          end
-        }),关于应用文本.length()-Java字符数("割草机Mow"),关于应用文本.length(),Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }),119,124,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\n\n贡献者：")
         关于应用文本.append("\nFusionApp")
         关于应用文本.setSpan(ClickableSpan({
@@ -845,10 +829,10 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),199,208,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }),131,140,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("本软件开发工具")
-        关于应用文本.setSpan(SuperscriptSpan(), 208,215,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        关于应用文本.setSpan(RelativeSizeSpan(0.7), 208,215,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(SuperscriptSpan(), 140, 147, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(RelativeSizeSpan(0.7), 140, 147, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nAdam·Eva")--1252237203
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -857,10 +841,10 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),216,224,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }),148,156,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("提供了许多技术上的帮助及开源项目")
-        关于应用文本.setSpan(SuperscriptSpan(), 224,240,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        关于应用文本.setSpan(RelativeSizeSpan(0.7), 224,240,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(SuperscriptSpan(), 156, 172, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(RelativeSizeSpan(0.7), 156, 172, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\njies辰")--1584645350
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -869,10 +853,10 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),241,246,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }),173,178,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("提供了许多技术上的帮助及开源项目")
-        关于应用文本.setSpan(SuperscriptSpan(), 246,262,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        关于应用文本.setSpan(RelativeSizeSpan(0.7), 246,262,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(SuperscriptSpan(), 178, 194, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(RelativeSizeSpan(0.7), 178, 194, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nkamihitoe")--3357212590
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -881,10 +865,10 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),263,272,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }),195,204,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("提供了许多技术上的帮助及开源项目")
-        关于应用文本.setSpan(SuperscriptSpan(), 272,288,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        关于应用文本.setSpan(RelativeSizeSpan(0.7), 272,288,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(SuperscriptSpan(), 204, 220, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(RelativeSizeSpan(0.7), 204, 220, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\ndingyi")--2187778735
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -893,10 +877,10 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),289,295,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }),221,227,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("提供了许多开源项目")
-        关于应用文本.setSpan(SuperscriptSpan(), 295,304,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        关于应用文本.setSpan(RelativeSizeSpan(0.7), 295,304,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(SuperscriptSpan(), 227, 236, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(RelativeSizeSpan(0.7), 227, 236, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\n壹影")--203455278
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -905,17 +889,17 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),305,307,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }),237,239,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("提供了网页可视化修改并生成js的JsHD调试器工具")
-        关于应用文本.setSpan(SuperscriptSpan(), 307,332,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        关于应用文本.setSpan(RelativeSizeSpan(0.7), 307,332,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(SuperscriptSpan(), 239, 264, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(RelativeSizeSpan(0.7), 239, 264, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\n\nMT官方信息：")
         关于应用文本.append("\nMT官网：mt2.cn")
-        关于应用文本.setSpan(URLSpan("https://mt2.cn/"),347,353,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(URLSpan("https://mt2.cn/"),279,285,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nMT小店：shop.mt2.cn")
-        关于应用文本.setSpan(URLSpan("https://shop.mt2.cn/"),359,370,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(URLSpan("https://shop.mt2.cn/"),291,302,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nMT论坛：bbs.binmt.cc")
-        关于应用文本.setSpan(URLSpan("https://bbs.binmt.cc/"),376,388,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        关于应用文本.setSpan(URLSpan("https://bbs.binmt.cc/"),308,320,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nQQ频道：hpt52ikey6")
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -925,7 +909,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),394,404,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }),326,336,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nQQ公测群：592479528")
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -935,7 +919,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),411,420,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }),343,352,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nQQ群1：307817058")
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -945,7 +929,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),426,435,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }),358,367,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nQQ群2：252233891")
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -955,7 +939,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),441,450,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }),373,382,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nQQ群3：487244392")
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -965,7 +949,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),456,465,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }),388,397,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nQQ群4：837411169")
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -975,7 +959,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),471,480,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }),403,412,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\n\n"..签名未通过)
         关于应用=AlertDialog.Builder(this)
         .setTitle("关于软件")
