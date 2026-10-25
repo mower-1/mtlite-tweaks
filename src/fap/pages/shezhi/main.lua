@@ -845,7 +845,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),199,208,Spannable.SPAN_
+        }),199,208,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("本软件开发工具")
         关于应用文本.setSpan(SuperscriptSpan(), 208,215,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.setSpan(RelativeSizeSpan(0.7), 208,215,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -857,7 +857,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),216,224,Spannable.SPAN_
+        }),216,224,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("提供了许多技术上的帮助及开源项目")
         关于应用文本.setSpan(SuperscriptSpan(), 224,240,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.setSpan(RelativeSizeSpan(0.7), 224,240,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -869,7 +869,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),241,246,Spannable.SPAN_
+        }),241,246,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("提供了许多技术上的帮助及开源项目")
         关于应用文本.setSpan(SuperscriptSpan(), 246,262,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.setSpan(RelativeSizeSpan(0.7), 246,262,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -881,7 +881,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),263,272,Spannable.SPAN_
+        }),263,272,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("提供了许多技术上的帮助及开源项目")
         关于应用文本.setSpan(SuperscriptSpan(), 272,288,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.setSpan(RelativeSizeSpan(0.7), 272,288,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -893,7 +893,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),289,295,Spannable.SPAN_
+        }),289,295,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("提供了许多开源项目")
         关于应用文本.setSpan(SuperscriptSpan(), 295,304,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.setSpan(RelativeSizeSpan(0.7), 295,304,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -905,7 +905,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),305,307,Spannable.SPAN_
+        }),305,307,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("提供了网页可视化修改并生成js的JsHD调试器工具")
         关于应用文本.setSpan(SuperscriptSpan(), 307,332,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.setSpan(RelativeSizeSpan(0.7), 307,332,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -925,7 +925,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),394,404,Spannable.SPAN_
+        }),394,404,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nQQ公测群：592479528")
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -935,7 +935,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),411,420,Spannable.SPAN_
+        }),411,420,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nQQ群1：307817058")
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -945,7 +945,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),426,435,Spannable.SPAN_
+        }),426,435,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nQQ群2：252233891")
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -955,7 +955,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),441,450,Spannable.SPAN_
+        }),441,450,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nQQ群3：487244392")
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -965,7 +965,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),456,465,Spannable.SPAN_
+        }),456,465,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\nQQ群4：837411169")
         关于应用文本.setSpan(ClickableSpan({
           onClick=function(view)
@@ -975,7 +975,7 @@ if 传递数据 then
             ds.setColor(强调色) --设置颜色
             ds.setUnderlineText(false) --去掉下划线
           end
-        }),471,480,Spannable.SPAN_
+        }),471,480,Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         关于应用文本.append("\n\n"..签名未通过)
         关于应用=AlertDialog.Builder(this)
         .setTitle("关于软件")
