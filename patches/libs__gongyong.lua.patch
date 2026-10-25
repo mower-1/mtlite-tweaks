@@ -256,7 +256,7 @@
  if !获取应用数据("默认浏览页") then
    存储应用数据("默认浏览页","liulanye")
  end
-@@ -594,6 +818,164 @@
+@@ -594,6 +818,207 @@
    recycler_view.adapter=adapter
  end
  
@@ -299,13 +299,71 @@
 +  end
 +end
 +
-+--Cookie 展示与复制（风险确认通过后才会到这里）
++--Discuz / 本站 Cookie 用途说明（只用于展示，复制时不会带上）
++local Cookie用途表={
++  auth="登录凭证（最关键，泄露等于被盗号）",
++  saltkey="登录盐值，与 auth 一起校验登录状态",
++  sid="本次会话的会话ID，用于防跨站请求伪造",
++  lastvisit="上次访问时间（站点统计用）",
++  lastactivity="上次活动时间",
++  ulastactivity="最后活跃时间（在线状态判断）",
++  lastact="上次所在页面与时间",
++  lip="上次登录的 IP 与时间",
++  viewid="上次浏览的帖子",
++  visitedfid="已访问过的版块",
++  forum_lastvisit="各版块最后访问时间",
++  st_t="帖子浏览足迹（帖子ID/时间）",
++  st_p="帖子浏览足迹（帖子ID/时间）",
++  checkpm="有新私信未读标记",
++  lastcheckfeed="上次检查动态的时间",
++  misigntime="上次签到时间",
++  atlist="@ 提醒过的用户列表",
++  atarget="@ 时是否新窗口打开",
++  smile="表情设置",
++  recommend="推荐设置",
++  clearUserdata="缓存清理标记",
++  connect_is_bind="是否已绑定第三方登录",
++  connect_is_register="是否已用第三方登录注册过",
++  con_request_uri="上次请求地址（登录后回跳用）",
++  home_diymode="个人空间 DIY 模式开关",
++  uih_seen="界面提示的已读标记",
++  seccode="验证码校验状态",
++  saltkey_="登录盐值",
++}
++function Cookie用途说明(名)
++  local 后缀=名:match("_%d+_(.+)$") or 名
++  if Cookie用途表[后缀] then
++    return Cookie用途表[后缀]
++  end
++  if 后缀:find("^comiis_coloruid_") then
++    return "模板配色（个人外观设置）"
++  end
++  if 名:find("^acw_tc") or 名:find("^cdn_sec_tc") then
++    return "阿里云 WAF 风控令牌（与账号无关，会自动过期）"
++  end
++  if 名:find("^acw_sc") then
++    return "WAF 反爬校验令牌（与账号无关）"
++  end
++  if 后缀:find("^level") or 后缀:find("^groupid") then
++    return "用户组/等级缓存"
++  end
++  return "其他站点标记（可忽略，不影响登录）"
++end
++
++--Cookie 明细展示 + 复制（复制只给原始 Cookie，不带用途说明）
 +function 显示Cookie对话框()
 +  local CookieManager=bindClass("android.webkit.CookieManager")
 +  local cookie=tostring(CookieManager.getInstance().getCookie("https://bbs.binmt.cc/") or "")
 +  if cookie=="" then
 +    print2("没有取到 Cookie\n请先在软件里登录一次")
 +    return
++  end
++  local 行={}
++  for 项 in cookie:gmatch("[^;]+") do
++    local 名,值=项:match("^%s*(.-)%s*=%s*(.*)$")
++    if 名 and 名~="" then
++      行[#行+1]=名.."="..值.."\n　→ "..Cookie用途说明(名)
++    end
 +  end
 +  local 布局={
 +    ScrollView,
@@ -318,36 +376,21 @@
 +      padding="20dp",
 +      textSize="12sp",
 +      textColor=主文本色,
-+      Text=cookie,
++      Text=table.concat(行,"\n\n"),
 +      id="Cookie文本框",
 +    },
 +  }
 +  local 对话框视图=loadlayout(布局)
 +  Cookie文本框.setTextIsSelectable(true)
 +  AlertDialog.Builder(this)
-+  .setTitle("Cookie（"..cookie:len().." 字符）")
++  .setTitle("Cookie 明细（"..#行.." 条 / "..cookie:len().." 字符）")
 +  .setView(对话框视图)
-+  .setPositiveButton("复制",{onClick=function()
++  .setPositiveButton("复制Cookie",{onClick=function()
 +    复制文本(cookie)
-+    print("已复制 "..cookie:len().." 个字符")
++    print("已复制完整 Cookie（"..#行.." 条），不含用途说明")
 +  end})
 +  .setNegativeButton("关闭",nil)
 +  .show()
-+end
-+
-+--版本号按数值逐段比较：1.7.6 与 1.7 视为不同，且 1.7.6 > 1.7；缺失段按 0
-+function 版本号数值表(v)
-+  local t={}
-+  for n in tostring(v):gmatch("%d+") do table.insert(t,tonumber(n)) end
-+  return t
-+end
-+function 版本号比较(a,b)
-+  local A,B=版本号数值表(a),版本号数值表(b)
-+  for i=1,math.max(#A,#B) do
-+    local x,y=A[i] or 0,B[i] or 0
-+    if x<y then return -1 elseif x>y then return 1 end
-+  end
-+  return 0
 +end
 +
 +-- ===== 帖子本地缓存 =====
