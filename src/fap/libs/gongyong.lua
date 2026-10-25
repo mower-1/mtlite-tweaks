@@ -951,6 +951,21 @@ function 显示Cookie对话框()
   .show()
 end
 
+--版本号按数值逐段比较：1.7.6 与 1.7 视为不同，且 1.7.6 > 1.7；缺失段按 0
+function 版本号数值表(v)
+  local t={}
+  for n in tostring(v):gmatch("%d+") do table.insert(t,tonumber(n)) end
+  return t
+end
+function 版本号比较(a,b)
+  local A,B=版本号数值表(a),版本号数值表(b)
+  for i=1,math.max(#A,#B) do
+    local x,y=A[i] or 0,B[i] or 0
+    if x<y then return -1 elseif x>y then return 1 end
+  end
+  return 0
+end
+
 -- ===== 帖子本地缓存 =====
 --存整页渲染后的 HTML（含已加载的评论），键为 tid，不设上限，由用户在缓存页自行删除。
 --帖子被删后打开会命中「提示信息」错误页，此时自动改显本地缓存。
